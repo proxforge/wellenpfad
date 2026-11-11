@@ -1,0 +1,22 @@
+# Betriebssystem / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Lokale Hilfsdateien
+node_modules/
+*.log
+__pycache__/
+*.pyc
+
+# Niemals einchecken: Zugangsdaten & lokale Umgebungsvariablen
+.env
+.env.*
+*.pem
+*.key
+
+# Exportierte Spielstände (können persönliche Daten enthalten)
+wellenpfad-spielstand-*.json

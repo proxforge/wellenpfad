@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d1426">
+  <meta name="description" content="Wellenpfad – Lern-Rollenspiel für die amtlichen Prüfungsfragen zum Sportbootführerschein Binnen & See.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+  <title>Wellenpfad – Die SBF-Chroniken</title>
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <canvas id="c-bg"></canvas>
+      <canvas id="c-main"></canvas>
+      <canvas id="c-glow"></canvas>
+      <canvas id="c-fg"></canvas>
+      <div class="vignette"></div>
+      <div id="map-labels"></div>
+      <div id="enemy-tags"></div>
+      <div id="turn-order"></div>
+      <div id="hud"></div>
+      <div id="real-layer"></div>
+      <div id="fx-layer"></div>
+    </div>
+    <main id="panel"></main>
+  </div>
+  <div id="overlay"></div>
+  <div id="toasts"></div>
+  <noscript>Wellenpfad benötigt JavaScript.</noscript>
+  <script src="js/questions.js"></script>
+  <script src="js/gfx.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/real.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/battle.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
