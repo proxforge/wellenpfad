@@ -48,6 +48,7 @@ const AUDIO = (() => {
   function schedule() {
     if (!cur || !ac) return;
     const T = TRACKS[cur], st = 60 / T.bpm / 4;
+    if (nextT < ac.currentTime - 0.25) nextT = ac.currentTime + 0.05;
     while (nextT < ac.currentTime + 0.15) {
       const bar = Math.floor(step / 16) % 4, s = step % 16;
       const root = T.bass[bar];
@@ -67,16 +68,25 @@ const AUDIO = (() => {
       step++; nextT += st;
     }
   }
+  let wanted = null;
+  /* Startet ein Stück nur, wenn es nicht schon läuft – ein laufendes Stück wird nie neu begonnen */
   function music(name) {
+    wanted = name;
     if (!ensure()) return;
-    if (cur === name) return;
-    cur = musicOn ? name : null; wanted = name;
+    const target = musicOn ? name : null;
+    if (cur === target) return;
+    cur = target;
     step = 0; melIdx = 0; melLeft = 0; nextT = ac.currentTime + 0.05;
     clearInterval(timer);
     if (cur) timer = setInterval(schedule, 40);
   }
-  let wanted = null;
-  function setMusic(on) { musicOn = on; if (!on) { clearInterval(timer); cur = null; } else if (wanted) { const w = wanted; wanted = null; cur = null; music(w); } }
+  /* Nur echte Änderungen (an ↔ aus) wirken sich aus */
+  function setMusic(on) {
+    if (musicOn === on) return;
+    musicOn = on;
+    if (!on) { clearInterval(timer); cur = null; }
+    else if (wanted) music(wanted);
+  }
   function setSfx(on) { sfxOn = on; }
 
   function sfx(name) {
@@ -101,5 +111,5 @@ const AUDIO = (() => {
       case 'splash': noise(t, 0.4, 0.35, 500, d); break;
     }
   }
-  return { ensure, music, sfx, setMusic, setSfx };
+  return { ensure, music, sfx, setMusic, setSfx, get playing() { return { track: cur, step }; } };
 })();

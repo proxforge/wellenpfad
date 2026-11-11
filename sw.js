@@ -1,5 +1,5 @@
 /* Service Worker: macht Wellenpfad offline spielbar (Cache-first). */
-const CACHE = 'wellenpfad-v3';
+const CACHE = 'wellenpfad-v4';
 const FILES = [
 "./",
 "index.html",

@@ -732,6 +732,7 @@ const GAME = (() => {
       if (SCENE.mode === 'battle') BATTLE.tapStage(x, y);
       else if (SCENE.mode === 'map') tapMap(x, y);
     });
+    // Antippen schaltet den Ton im Browser frei; laufende Musik wird dabei nicht neu gestartet
     const unlock = () => { AUDIO.ensure(); if (SAVE.s) { AUDIO.setMusic(SAVE.s.settings.music); AUDIO.setSfx(SAVE.s.settings.sfx); } };
     window.addEventListener('pointerdown', unlock, { once: false, passive: true });
     document.addEventListener('visibilitychange', () => { if (document.hidden && SAVE.s) SAVE.persist(); });
