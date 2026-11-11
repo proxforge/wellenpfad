@@ -5,8 +5,9 @@ Jede Attacke gelingt nur, wenn du die Prüfungsfrage richtig beantwortest – so
 
 ## Starten
 
-**Online spielen:** Nach dem Aktivieren von GitHub Pages (Settings → Pages → Source: *GitHub Actions*)
-veröffentlicht der Workflow `.github/workflows/pages.yml` das Spiel bei jedem Push auf `main` automatisch.
+**Online spielen:** Das Spiel ist eine reine statische Seite ohne Build-Schritt. In GitHub unter
+Settings → Pages → *Deploy from a branch* den Branch `main` mit Ordner `/ (root)` wählen – fertig.
+(`.nojekyll` sorgt dafür, dass GitHub die Dateien unverändert ausliefert.)
 
 **Lokal:** Keine Installation, kein Build. Einfach den Ordner über einen Webserver ausliefern, z. B.:
 
