@@ -329,7 +329,7 @@ const GAME = (() => {
       partyStrip(),
       pager([
         tile('🛏️', 'Gasthaus', `Heilung · ${innCost()} G`, inn),
-        tile('🛒', 'Händler', 'Tränke & Werkzeug', shop),
+        tile('🛒', 'Händler', 'Tränke & Werkzeug', () => shop()),
         tile('⚒️', 'Werft', 'Schiff & Waffen', wharf),
         tile('🍺', 'Taverne' + (recruits.length ? ' ❗' : ''), recruits.length ? 'Jemand wartet!' : 'Crew', () => tavern(n, recruits)),
         tile('📜', 'Prüfungsamt', S().examPassed ? 'Bestanden ✔' : 'Simulation', examOffice),

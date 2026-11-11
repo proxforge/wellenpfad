@@ -669,3 +669,4 @@ html, body { height: 100%; overflow: hidden; }
 .quiz-card.paged .quiz-media .qm-cell { height: 100%; min-height: 56px; }
 .ans-pager .pg-body { gap: 6px; }
 @media (max-height: 600px) { .quiz-head .tag.box { display: none; } .modal.quiz-modal { padding-top: 6px; padding-bottom: 6px; } .quiz-card { gap: 6px; } }
+.quiz-card.paged.answered .quiz-media:not(.react-media) { display: none; }

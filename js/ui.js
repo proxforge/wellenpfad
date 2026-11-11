@@ -113,7 +113,7 @@ const UI = (() => {
     const next = el('button.pg-btn', { 'aria-label': 'Nächste Seite', onclick: () => go(page + 1) }, '▶');
     const ctl = el('div.pg-ctl', null, prev, info, next);
     const root = el('div.pager' + (opts.cls ? '.' + opts.cls : ''), null, body, ctl);
-    let page = opts.page || 0, pageOf = [], pages = 1;
+    let page = Number.isInteger(opts.page) && opts.page > 0 ? opts.page : 0, pageOf = [], pages = 1;
     function layout() {
       if (!root.isConnected) return;
       items.forEach(it => { it.style.display = ''; });

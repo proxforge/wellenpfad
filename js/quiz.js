@@ -124,6 +124,7 @@ const QUIZ = (() => {
         mediaBox,
         el('div.quiz-answers', null, ansBtns),
         foot);
+      card.dataset.q = q.id;
       card.style.setProperty('--qs', S.settings.textSize || 1);
       const m = overlay(card, { cls: 'quiz-modal', top: true });
       const stopFit = autoFit(card);
@@ -154,7 +155,7 @@ const QUIZ = (() => {
         const rightIdx = order.indexOf(0);
         ansBtns.forEach((b, i) => { b.disabled = true; if (i === rightIdx) b.classList.add('right'); });
         if (!ok) ansBtns[k].classList.add('wrong');
-        if (card._pager) card._pager.showItem(rightIdx); // geblätterte Antworten: richtige Lösung zeigen
+        if (card._pager) { card.classList.add('answered'); card._pager.showItem(rightIdx); } // geblätterte Antworten: Platz für die Lösung
         AUDIO.sfx(ok ? 'correct' : 'wrong');
         const r = reaction(ok);
         // Reaktionsbild (Realmodus) ersetzt den Bildbereich, damit nichts gescrollt werden muss
@@ -193,6 +194,7 @@ const QUIZ = (() => {
         media(q.img),
         el('div.quiz-answers', null, btns),
         el('div.quiz-foot.right', null, next));
+      card.dataset.q = q.id;
       card.style.setProperty('--qs', (SAVE.s && SAVE.s.settings.textSize) || 1);
       const m = overlay(card, { cls: 'quiz-modal', top: true });
       const stopFit = autoFit(card);
@@ -214,6 +216,7 @@ const QUIZ = (() => {
       el('div.quiz-foot.right', null,
         btn('Üben', async () => { m.close(); await ask({ q, context: 'Einzelfrage', autoClose: false }); if (opts.onpractice) opts.onpractice(); }, 'ghost'),
         btn('Schließen', () => m.close(), 'gold')));
+    card.dataset.q = q.id;
     card.style.setProperty('--qs', (SAVE.s && SAVE.s.settings.textSize) || 1);
     const m = overlay(card, { cls: 'quiz-modal', top: true });
     const stopFit = autoFit(card);
