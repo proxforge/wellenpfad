@@ -65,10 +65,24 @@ const QUIZ = (() => {
      erst Schrift bis zu einer gut lesbaren Mindestgröße verkleinern; reicht das
      nicht (sehr lange Fragen auf kleinen Handys), werden die Antworten geblättert. */
   const MIN_SCALE = 0.8;
+  /* Blättermodus: Schrift so weit verkleinern, dass die längste Antwort auf eine Seite passt */
+  function fitPaged(card) {
+    const body = card.querySelector('.ans-pager .pg-body');
+    if (!body) return;
+    const items = [...body.children];
+    card.style.fontSize = '';
+    const base = parseFloat(getComputedStyle(card).fontSize);
+    let s = 1;
+    items.forEach(it => { it.style.display = ''; });
+    while (s > MIN_SCALE && Math.max(...items.map(i => i.offsetHeight)) > body.clientHeight) {
+      s -= 0.04; card.style.fontSize = (base * s) + 'px';
+    }
+    card._pager.relayout();
+  }
   function autoFit(card) {
     const run = () => {
       const fits = fitText(card, MIN_SCALE);
-      if (card._pager) { card._pager.relayout(); return; } // Seiten nach jeder Schriftänderung neu aufteilen
+      if (card._pager) { fitPaged(card); return; } // jede Antwort muss ganz auf eine Seite passen
       if (fits) return;
       const ans = card.querySelector('.quiz-answers');
       if (!ans) return;
