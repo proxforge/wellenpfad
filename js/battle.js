@@ -126,9 +126,8 @@ const BATTLE = (() => {
       const card = el('div.b-hero' + (x === h ? '.active' : '') + (x.ko ? '.ko' : ''), null,
         el('img.pt', { src: SPRITES.portrait(x.id), alt: '' }),
         el('div.b-info', null,
-          el('div.b-name', null, x.d.name.split(' ')[0], x.defending ? ' 🛡' : '', x.buffs.atk ? ' ⬆' : '', x.buffs.def ? ' ⛨' : ''),
-          el('div.b-num', null, `LP ${x.hp}/${x.maxhp}`), UI.bar(x.hp, x.maxhp, 'hp'),
-          el('div.b-num', null, `FP ${x.sp}/${x.maxsp}`), UI.bar(x.sp, x.maxsp, 'sp'),
+          el('div.b-name', null, el('span', null, x.d.name.split(' ')[0], x.defending ? ' 🛡' : '', x.buffs.atk ? ' ⬆' : '', x.buffs.def ? ' ⛨' : ''), el('small.b-num', null, `${x.hp}/${x.maxhp}`)),
+          UI.bar(x.hp, x.maxhp, 'hp'), UI.bar(x.sp, x.maxsp, 'sp'),
           el('div.bp', null, [0, 1, 2, 3, 4].map(i => el('span' + (i < x.bp ? '.on' : '') + (x === h && i >= x.bp - x.boost && i < x.bp ? '.use' : ''))))));
       return card;
     }));
@@ -138,6 +137,7 @@ const BATTLE = (() => {
     UI.panel(el('div.battle-ui', null, party, cmd));
   }
 
+  const wide = () => (document.getElementById('panel').clientWidth > 520 ? 2 : 1);
   function boostCtl(h) {
     return el('div.boost', null,
       el('span', null, 'Boost'),
@@ -147,7 +147,7 @@ const BATTLE = (() => {
   }
 
   function commandMenu(h, sub) {
-    const head = el('div.cmd-head', null, el('b', null, h.d.name), ' ist am Zug', boostCtl(h));
+    const head = el('div.cmd-head', null, el('b', null, h.d.name.split(' ')[0]), el('span.muted', null, ' ist am Zug'), boostCtl(h));
     let body;
     if (!sub) {
       body = el('div.cmd-grid', null,
@@ -157,19 +157,19 @@ const BATTLE = (() => {
         btn('🛡 Verteidigen', () => { h.defending = true; h.boost = 0; floatText(h.x, h.y - 26, 'Verteidigt', 'info'); endTurn(); }),
         btn('🏃 Flucht', () => tryFlee(h), 'ghost'));
     } else if (sub === 'weapon') {
-      body = el('div.cmd-list', null, h.d.weapons.map(w => btn(`${TYPES[w].i} ${TYPES[w].n}`, () => chooseTarget(h, { kind: 'attack', type: w }))), btn('◂ Zurück', () => setSub(null), 'ghost'));
+      body = el('div.cmd-list', null, UI.pager(h.d.weapons.map(w => btn(`${TYPES[w].i} ${TYPES[w].n}`, () => chooseTarget(h, { kind: 'attack', type: w }))), { cols: 2 }), btn('◂ Zurück', () => setSub(null), 'ghost small'));
     } else if (sub === 'skill') {
       const lv = SAVE.s.heroes[h.id].lv;
-      body = el('div.cmd-list', null, h.d.skills.map(s => {
+      body = el('div.cmd-list', null, UI.pager(h.d.skills.map(s => {
         const locked = lv < s.lv;
         const b = btn(el('span.sk', null, el('span', null, `${s.type ? TYPES[s.type].i + ' ' : ''}${s.n}`), el('small', null, locked ? `ab Stufe ${s.lv}` : `${s.sp} FP · ${s.d}`)),
           () => chooseTarget(h, Object.assign({}, s, { kind: 'skill', sk: s.kind })), '', { disabled: locked || h.sp < s.sp || (s.target === 'dead' && !B.heroes.some(x => x.ko)) });
         return b;
-      }), btn('◂ Zurück', () => setSub(null), 'ghost'));
+      }), { cols: wide() }), btn('◂ Zurück', () => setSub(null), 'ghost small'));
     } else if (sub === 'item') {
       const its = Object.entries(SAVE.s.items).filter(([k, n]) => n > 0 && ITEMS[k].use !== 'joker');
-      body = el('div.cmd-list', null, its.length ? its.map(([k, n]) => btn(el('span.sk', null, el('span', null, `${ITEMS[k].i} ${ITEMS[k].n} ×${n}`), el('small', null, ITEMS[k].d)),
-        () => chooseTarget(h, { kind: 'item', item: k, target: ITEMS[k].target }))) : el('p.muted', null, 'Keine Gegenstände.'), btn('◂ Zurück', () => setSub(null), 'ghost'));
+      body = el('div.cmd-list', null, its.length ? UI.pager(its.map(([k, n]) => btn(el('span.sk', null, el('span', null, `${ITEMS[k].i} ${ITEMS[k].n} ×${n}`), el('small', null, ITEMS[k].d)),
+        () => chooseTarget(h, { kind: 'item', item: k, target: ITEMS[k].target }))), { cols: wide() }) : el('p.muted', null, 'Keine Gegenstände.'), btn('◂ Zurück', () => setSub(null), 'ghost small'));
     }
     function setSub(s) { const c = document.querySelector('.b-cmd'); if (c) c.replaceWith(commandMenu(h, s)); }
     return el('div.b-cmd', null, head, body);
@@ -189,9 +189,9 @@ const BATTLE = (() => {
     if (!list.length) { UI.toast('Kein gültiges Ziel.'); return; }
     if (list.length === 1) return go(list);
     B.picking = t => { B.picking = null; go([t]); };
-    const box = el('div.b-cmd', null, el('div.cmd-head', null, 'Ziel wählen', el('small.muted', null, ' (oder auf den Gegner tippen)')),
-      el('div.cmd-list', null, list.map(t => btn(t.side === 'e' ? `${t.name}${t.broken ? ' (BREAK)' : ''}` : `${t.d.name} – LP ${t.hp}/${t.maxhp}`, () => B.picking && B.picking(t))),
-        btn('◂ Zurück', () => { B.picking = null; renderPanel(h); }, 'ghost')));
+    const box = el('div.b-cmd', null, el('div.cmd-head', null, el('b', null, 'Ziel wählen'), el('small.muted', null, ' oder Gegner antippen')),
+      el('div.cmd-list', null, UI.pager(list.map(t => btn(t.side === 'e' ? `${t.name}${t.broken ? ' (BREAK)' : ''}` : `${t.d.name} – LP ${t.hp}/${t.maxhp}`, () => B.picking && B.picking(t))), { cols: 2 }),
+        btn('◂ Zurück', () => { B.picking = null; renderPanel(h); }, 'ghost small')));
     document.querySelector('.b-cmd').replaceWith(box);
   }
 
@@ -417,15 +417,15 @@ const BATTLE = (() => {
   function showSummary(s) {
     return new Promise(res => {
       const S = SAVE.s;
-      UI.panel(el('div.result', null,
-        el('h2', null, '⚓ Sieg!'),
+      const rows = [
         el('div.res-row', null, el('span', null, 'Erfahrung'), el('b', null, `+${s.xp} EP`)),
         el('div.res-row', null, el('span', null, 'Gold'), el('b.gold', null, `+${s.gold} G`)),
         s.drops.length ? el('div.res-row', null, el('span', null, 'Beute'), el('b', null, s.drops.map(k => ITEMS[k].i + ' ' + ITEMS[k].n).join(', '))) : null,
-        s.lvls.map(([id, lv]) => el('div.res-lv', null, el('img.pt', { src: SPRITES.portrait(id), alt: '' }), `${HEROES[id].name} erreicht Stufe ${lv}!`,
-          HEROES[id].skills.filter(k => k.lv === lv).map(k => el('small', null, ` Neue Fähigkeit: ${k.n}`)))),
-        el('div.res-row.muted', null, el('span', null, 'Lernquote gesamt'), el('b', null, `${Math.round(S.stats.correct / Math.max(1, S.stats.answered) * 100)} %`)),
-        btn('Weiter ▸', () => res(), 'gold wide')));
+        ...s.lvls.map(([id, lv]) => el('div.res-lv', null, el('img.pt', { src: SPRITES.portrait(id), alt: '' }),
+          el('span', null, `${HEROES[id].name} erreicht Stufe ${lv}!`, HEROES[id].skills.filter(k => k.lv === lv).map(k => el('small', null, ` Neu: ${k.n}`))))),
+        el('div.res-row.muted', null, el('span', null, 'Lernquote gesamt'), el('b', null, `${Math.round(S.stats.correct / Math.max(1, S.stats.answered) * 100)} %`))
+      ].filter(Boolean);
+      UI.panel(UI.view('⚓ Sieg!', null, UI.pager(rows), btn('Weiter ▸', () => res(), 'gold wide')));
     });
   }
 

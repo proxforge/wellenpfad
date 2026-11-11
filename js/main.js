@@ -3,7 +3,7 @@
 const SCENE = { mode: 'title', env: { time: 'dusk', shore: 'reeds', water: 'river' }, scroll: 0, shipX: 200, travel: null, mapSel: null };
 
 const GAME = (() => {
-  const { el, btn, panel, overlay, toast, dialog, confirm, bar, wait } = UI;
+  const { el, btn, panel, overlay, toast, dialog, confirm, bar, wait, view, pager, tabs } = UI;
   const $ = s => document.querySelector(s);
   const S = () => SAVE.s;
   let current = null; // aktueller Bildschirm (für Navigation)
@@ -156,68 +156,78 @@ const GAME = (() => {
     h.replaceChildren(el('div.hud-loc', null, REAL.on() ? '' : title || ''), el('div.hud-gold', null, `${S().gold} G`));
     REAL.stage(title);
   }
-  function nav(active) {
-    const items = [['map', '🗺️', 'Karte'], ['crew', '👥', 'Crew'], ['bag', '🎒', 'Taschen'], ['learn', '📚', 'Lernen'], ['stats', '📊', 'Statistik'], ['opts', '⚙️', 'Optionen']];
-    return el('nav.navbar', null, items.map(([k, i, n]) => el('button' + (k === active ? '.on' : ''), { onclick: () => { AUDIO.sfx('select'); go(k); } }, el('span', null, i), el('small', null, n))));
+  /* Feste Navigationsleiste: jeder Bereich ist mit einem Tipp erreichbar */
+  const NAV = [['place', '⚓', 'Ort'], ['map', '🗺️', 'Karte'], ['crew', '👥', 'Crew'], ['bag', '🎒', 'Taschen'], ['learn', '📚', 'Lernen'], ['stats', '📊', 'Statistik'], ['opts', '⚙️', 'Optionen']];
+  function setNav(active) {
+    const n = $('#nav');
+    if (active === false) { n.hidden = true; return; }
+    n.hidden = false;
+    n.replaceChildren(...NAV.map(([k, i, label]) => el('button' + (k === active ? '.on' : ''), { 'aria-current': k === active ? 'page' : null, onclick: () => { AUDIO.sfx('select'); go(k); } }, el('span', null, i), el('small', null, label))));
   }
+  function show(navKey, node) { setNav(navKey); panel(node); }
   function go(screen, arg) {
     current = screen;
     $('#map-labels').replaceChildren();
+    if (screen === 'place') return enterNode(S().node, true);
     const f = { title: showTitle, map: showMap, node: showNode, crew: showCrew, bag: showBag, learn: showLearn, stats: showStats, opts: showOptions }[screen];
     f(arg);
   }
-  function header(title, sub) { return el('div.phead', null, el('h2', null, title), sub ? el('p.sub', null, sub) : null); }
+  const cols2 = () => ($('#panel').clientWidth > 620 ? 2 : 1);
 
   /* ======================= Titel ======================= */
   function showTitle() {
+    current = 'title';
     SCENE.mode = 'title'; SCENE.env = { time: 'dusk', shore: 'reeds', water: 'river' };
     $('#hud').replaceChildren();
+    REAL.stage(null);
     AUDIO.music('title');
     const slots = [1, 2, 3].map(n => {
       const info = SAVE.slotInfo(n);
       return el('div.slot', null,
-        btn(info ? el('span.slot-in', null, el('b', null, `Spielstand ${n}`), el('small', null, `${SAVE.MODES[info.mode].n} · ${NODES[info.node].n} · Stufe ${info.lv}`),
-          el('small', null, `${info.answered} Antworten · ${Math.round(info.correct / Math.max(1, info.answered) * 100)} % richtig · ${new Date(info.saved).toLocaleDateString('de-DE')}`))
+        btn(info ? el('span.slot-in', null, el('b', null, `Spielstand ${n}`), el('small', null, `${SAVE.MODES[info.mode].n} · ${NODES[info.node].n} · Stufe ${info.lv} · ${Math.round(info.correct / Math.max(1, info.answered) * 100)} % richtig`))
           : el('span.slot-in', null, el('b', null, `Spielstand ${n}`), el('small', null, 'Leer – neues Abenteuer beginnen')),
         () => info ? (SAVE.load(n), enterGame()) : newGame(n), 'slot-btn'),
-        info ? btn('🗑', async () => { if (await confirm(`Spielstand ${n} wirklich löschen?`, 'Löschen')) { SAVE.remove(n); showTitle(); } }, 'ghost small del') : null);
+        info ? btn('🗑', async () => { if (await confirm(`Spielstand ${n} wirklich löschen?`, 'Löschen')) { SAVE.remove(n); showTitle(); } }, 'ghost small del', { 'aria-label': `Spielstand ${n} löschen` }) : null);
     });
-    panel(el('div.title', null,
+    show(false, el('div.view.title', null,
       el('h1', null, 'Wellenpfad'),
-      el('p.tagline', null, 'Die SBF-Chroniken – lerne die amtlichen Prüfungsfragen für den Sportbootführerschein Binnen & See als Rollenspiel-Abenteuer.'),
+      el('p.tagline', null, 'Lerne die amtlichen Prüfungsfragen zum Sportbootführerschein als Rollenspiel-Abenteuer.'),
       el('div.slots', null, slots),
-      el('div.row', null, btn('❓ Spielanleitung', help, 'ghost'), btn('📥 Spielstand importieren', () => importSave(), 'ghost')),
-      el('p.fine', null, `Fragen: amtliche Fragenkataloge (ELWIS, Stand 01.08.2023) · ${window.QUESTIONS.length} Multiple-Choice-Fragen`)));
+      el('div.row', null, btn('❓ Anleitung', help, 'ghost'), btn('📥 Importieren', () => importSave(), 'ghost')),
+      el('p.fine', null, `${window.QUESTIONS.length} amtliche Fragen (ELWIS, Stand 01.08.2023)`)));
   }
   function help() {
+    const slides = [
+      ['⚔️ Lernen durch Kämpfen', 'Jeder Angriff wird erst ausgeführt, wenn du eine amtliche Prüfungsfrage richtig beantwortest. Falsch heißt daneben – und du siehst sofort die richtige Antwort.'],
+      ['🗂️ Lernkartei', 'Jede Frage wandert bei richtiger Antwort ein Fach weiter (0–5), bei falscher zurück auf 0. Schwache Fragen kommen öfter dran.'],
+      ['🛡️ Schilde & BREAK', 'Gegner haben Schilde und versteckte Schwächen. Triffst du eine Schwäche, sinkt der Schild. Bei 0 setzt der Gegner aus und nimmt fast doppelten Schaden.'],
+      ['✨ Boost & Bonus', 'Jede Runde gibt +1 BP (max. 5). Bis zu 3 BP verstärken einen Angriff. Antworten unter 15 Sekunden geben +20 % Schaden, Lernserien bis +40 %.'],
+      ['🛑 Abwehrfragen', 'Lädt ein Gegner einen Gewaltangriff auf, halbiert eine richtige Antwort den Schaden.'],
+      ['⚓ Häfen', 'Gasthaus (Heilung), Händler, Werft (Upgrades), Taverne (neue Gefährten) und Prüfungsamt mit Prüfungssimulation: 30 Fragen, ab 24 richtigen bestanden.'],
+      ['🧭 Bedienung', 'Unten wechselst du jederzeit zwischen Ort, Karte, Crew, Taschen, Lernen, Statistik und Optionen. Längere Listen blätterst du mit ◀ ▶ oder per Wischen.'],
+      ['🏁 Ziel', 'Erreiche die Leuchtturmklippe, bestehe die Prüfungssimulation und besiege den Leviathan der Mündung.']];
     const m = overlay(el('div.help', null,
       el('h2', null, 'So funktioniert Wellenpfad'),
-      el('ul', null,
-        el('li', null, el('b', null, 'Lernen durch Kämpfen: '), 'Jeder Angriff und jede Fähigkeit wird erst ausgeführt, wenn du eine amtliche Prüfungsfrage richtig beantwortest. Falsch = daneben – und du siehst sofort die richtige Antwort.'),
-        el('li', null, el('b', null, 'Lernkartei (Leitner): '), 'Jede Frage wandert bei richtiger Antwort ein Fach weiter (0–5), bei falscher zurück auf 0. Schwache Fragen kommen öfter dran.'),
-        el('li', null, el('b', null, 'Schilde & BREAK: '), 'Gegner haben Schilde 🛡 und Schwächen (?). Triffst du eine Schwäche, sinkt der Schild. Bei 0 ist der Gegner gebrochen: Er setzt aus und nimmt fast doppelten Schaden.'),
-        el('li', null, el('b', null, 'Boost (BP): '), 'Jede Runde +1 BP (max. 5). Setze bis zu 3 BP ein: mehr Treffer bei Angriffen, mehr Kraft bei Fähigkeiten.'),
-        el('li', null, el('b', null, 'Bonus: '), 'Schnelle Antworten (< 15 s) geben +20 % Schaden, Lernserien bis +40 %.'),
-        el('li', null, el('b', null, 'Abwehrfragen: '), 'Lädt ein Gegner einen Gewaltangriff auf, halbiert eine richtige Antwort den Schaden.'),
-        el('li', null, el('b', null, 'Häfen: '), 'Gasthaus (Heilung), Händler, Werft (Upgrades), Taverne (Crew) und das Prüfungsamt mit Prüfungssimulation (30 Fragen, ab 24 richtig bestanden).'),
-        el('li', null, el('b', null, 'Ziel: '), 'Erreiche die Leuchtturmklippe, bestehe die Prüfungssimulation und besiege den Leviathan der Mündung.')),
-      btn('Alles klar!', () => m.close(), 'gold wide')), { dismiss: true, cls: 'wide' });
+      pager(slides.map(([t, d]) => el('div.help-slide', null, el('h3', null, t), el('p', null, d)))),
+      btn('Alles klar!', () => m.close(), 'gold wide')), { dismiss: true, cls: 'help-modal' });
   }
   function newGame(slot) {
     let mode = 'binnen', segeln = false;
     const opts = el('div.modes');
     const render = () => opts.replaceChildren(...Object.entries(SAVE.MODES).map(([k, m]) => {
       const cnt = window.QUESTIONS.filter(q => m.secs.includes(q.s)).length;
-      return el('button.mode' + (k === mode ? '.on' : ''), { onclick: () => { mode = k; AUDIO.sfx('select'); render(); } }, el('b', null, m.n), el('small', null, `${cnt} Fragen (${m.secs.map(s => SAVE.SECTION_NAMES[s]).join(' + ')})`));
-    }), el('label.check', null, el('input', { type: 'checkbox', checked: segeln, onchange: e => { segeln = e.target.checked; } }), ' Zusatz „Segeln Binnen“ (+47 Fragen)'));
+      return el('button.mode' + (k === mode ? '.on' : ''), { onclick: () => { mode = k; AUDIO.sfx('select'); render(); } }, el('b', null, m.n), el('small', null, `${cnt} Fragen`));
+    }));
     render();
-    panel(el('div.newgame', null, header('Neues Abenteuer', `Spielstand ${slot} – welchen Führerschein lernst du?`), opts,
-      el('div.row', null, btn('◂ Zurück', showTitle, 'ghost'), btn('Ablegen! ⚓', async () => {
+    show(false, view('Neues Abenteuer', { back: showTitle, sub: `Spielstand ${slot} – welchen Führerschein lernst du?` },
+      opts,
+      el('label.check', null, el('input', { type: 'checkbox', id: 'new-segeln', onchange: e => { segeln = e.target.checked; } }), ' Zusatz „Segeln Binnen“ (+47 Fragen)'),
+      btn('Ablegen! ⚓', async () => {
         SAVE.create(slot, mode, segeln);
         S().seenStory.intro = true;
         await dialog(STORY.intro);
         enterNode(0, true);
-      }, 'gold'))));
+      }, 'gold wide')));
   }
   function enterGame() { enterNode(S().node, true); }
 
@@ -234,6 +244,7 @@ const GAME = (() => {
 
   /* ======================= Karte ======================= */
   function showMap() {
+    current = 'map';
     SCENE.mode = 'map'; SCENE.mapSel = S().node;
     hud('Weltkarte');
     AUDIO.music('sail');
@@ -242,18 +253,19 @@ const GAME = (() => {
   }
   function renderMapPanel() {
     const sel = SCENE.mapSel, n = NODES[sel];
-    const list = el('div.nodelist', null, NODES.map((x, i) => {
+    const nodes = NODES.map((x, i) => {
       const open = i <= S().unlocked;
       const icon = x.kind === 'harbor' ? '⚓' : x.kind === 'boss' ? '☠️' : '🌊';
-      const prog = x.kind === 'water' ? ` ${Math.min(S().wins[x.id] || 0, x.need)}/${x.need}` : x.kind === 'boss' && S().bosses[x.boss] ? ' ✔' : '';
+      const prog = x.kind === 'water' ? `${Math.min(S().wins[x.id] || 0, x.need)}/${x.need}` : x.kind === 'boss' && S().bosses[x.boss] ? '✔' : '';
       return el('button.node' + (i === sel ? '.on' : '') + (open ? '' : '.locked') + (i === S().node ? '.here' : ''), { onclick: () => selectNode(i), disabled: !open },
-        el('span', null, icon), el('b', null, open ? x.n : 'Unerforscht'), el('small', null, open ? prog : ''));
-    }));
+        el('span', null, icon), el('b', null, open ? x.n : 'Unerforscht'), prog ? el('small', null, prog) : null);
+    });
     const lvTxt = n.kind === 'water' ? `Gegnerstufe ${n.lv[0]}–${n.lv[1]}` : n.kind === 'boss' ? `Boss · Stufe ${n.lv}` : 'Hafen';
-    panel(nav('map'), el('div.mapinfo', null,
-      el('h3', null, n.n, el('small', null, ' · ' + lvTxt)), el('p', null, n.d),
-      sel === S().node ? btn('▸ Hier anlegen', () => enterNode(sel), 'gold wide') : btn(`⛵ Kurs setzen: ${n.n}`, () => travel(sel), 'gold wide')),
-      list);
+    show('map', view('🗺️ Weltkarte', { right: `${S().gold} G` },
+      el('div.mapinfo', null,
+        el('div.mi-text', null, el('b', null, n.n), el('small', null, ' · ' + lvTxt), el('p', null, n.d)),
+        sel === S().node ? btn('▸ Anlegen', () => enterNode(sel), 'gold') : btn('⛵ Kurs setzen', () => travel(sel), 'gold')),
+      pager(nodes, { cols: 3, cls: 'nodes' })));
   }
   function selectNode(i) {
     if (i > S().unlocked || SCENE.travel) return;
@@ -264,7 +276,7 @@ const GAME = (() => {
     if (SCENE.travel) return;
     $('#map-labels').replaceChildren();
     SCENE.travel = { a: NODES[S().node], b: NODES[i], t0: performance.now(), dur: 400 + Math.abs(i - S().node) * 450 };
-    panel(el('div.travel', null, el('p', null, `Kurs auf ${NODES[i].n} …`)));
+    show('map', el('div.view.travel', null, el('p', null, `Kurs auf ${NODES[i].n} …`)));
     await wait(SCENE.travel.dur + 100);
     SCENE.travel = null;
     S().node = i; SAVE.persist();
@@ -289,13 +301,13 @@ const GAME = (() => {
     showNode();
     if (!fromLoad && n.kind === 'harbor' && !S().seenStory['visit_' + n.id]) { S().seenStory['visit_' + n.id] = true; toast(`⚓ ${n.n} – Fortschritt gespeichert`); }
   }
-  function showNode(sub) {
+  function showNode() {
     current = 'node';
     const n = NODES[S().node];
     SCENE.mode = n.kind === 'harbor' ? 'harbor' : 'sail';
     SCENE.env = Object.assign({}, n.env);
     hud(n.n);
-    if (n.kind === 'harbor') return harbor(n, sub);
+    if (n.kind === 'harbor') return harbor(n);
     if (n.kind === 'water') return water(n);
     return bossNode(n);
   }
@@ -304,23 +316,25 @@ const GAME = (() => {
     return el('div.pstrip', null, S().party.map(id => {
       const st = BATTLE.heroStats(id), h = S().heroes[id];
       const hp = h.hp === null ? st.hp : h.hp, sp = h.sp === null ? st.sp : h.sp;
-      return el('div.pmini' + (hp <= 0 ? '.ko' : ''), null, el('img.pt', { src: SPRITES.portrait(id), alt: '' }),
-        el('div', null, el('small', null, `${HEROES[id].name.split(' ')[0]} Lv${h.lv}`), bar(hp, st.hp, 'hp'), bar(sp, st.sp, 'sp')));
+      return el('div.pmini' + (hp <= 0 ? '.ko' : ''), { title: `${HEROES[id].name}: LP ${hp}/${st.hp}, FP ${sp}/${st.sp}` }, el('img.pt', { src: SPRITES.portrait(id), alt: '' }),
+        el('div', null, el('small', null, `${HEROES[id].name.split(' ')[0]} ${h.lv}`), bar(hp, st.hp, 'hp'), bar(sp, st.sp, 'sp')));
     }));
   }
+  const tile = (icon, label, sub, fn, cls = '', attrs) => btn(el('span.tl', null, el('span.tl-i', null, icon), el('span.tl-t', null, el('b', null, label), sub ? el('small', null, sub) : null)), fn, 'tile-btn ' + cls, attrs);
 
   /* ---------- Hafen ---------- */
-  function harbor(n, sub) {
+  function harbor(n) {
     const recruits = (RECRUITS[n.id] || []).filter(r => !S().heroes[r.id].joined && (!r.after || S().bosses[NODES.find(x => x.id === r.after).boss]));
-    const menu = el('div.menu-grid', null,
-      btn(el('span', null, '🛏️ Gasthaus', el('small', null, `Heilung · ${innCost()} G`)), inn),
-      btn(el('span', null, '🛒 Händler', el('small', null, 'Tränke & Werkzeug')), shop),
-      btn(el('span', null, '⚒️ Werft', el('small', null, 'Schiff & Waffen')), wharf),
-      btn(el('span', null, '🍺 Taverne' + (recruits.length ? ' ❗' : ''), el('small', null, recruits.length ? 'Jemand wartet auf dich' : 'Crew verwalten')), () => tavern(n, recruits)),
-      btn(el('span', null, '📜 Prüfungsamt', el('small', null, S().examPassed ? 'Bestanden ✔' : 'Prüfungssimulation')), examOffice),
-      btn(el('span', null, '💾 Speichern', el('small', null, `Spielstand ${SAVE.slot}`)), () => { SAVE.persist(); AUDIO.sfx('coin'); toast('Spielstand gespeichert.'); }),
-      btn(el('span', null, '⛵ Ablegen', el('small', null, 'Zur Weltkarte')), () => go('map'), 'gold'));
-    panel(nav(null), header(`⚓ ${n.n}`, n.d), partyStrip(), menu);
+    show('place', view(`⚓ ${n.n}`, { right: `${S().gold} G`, sub: n.d },
+      partyStrip(),
+      pager([
+        tile('🛏️', 'Gasthaus', `Heilung · ${innCost()} G`, inn),
+        tile('🛒', 'Händler', 'Tränke & Werkzeug', shop),
+        tile('⚒️', 'Werft', 'Schiff & Waffen', wharf),
+        tile('🍺', 'Taverne' + (recruits.length ? ' ❗' : ''), recruits.length ? 'Jemand wartet!' : 'Crew', () => tavern(n, recruits)),
+        tile('📜', 'Prüfungsamt', S().examPassed ? 'Bestanden ✔' : 'Simulation', examOffice),
+        tile('⛵', 'Ablegen', 'Zur Weltkarte', () => go('map'), 'gold')
+      ], { cols: 2, cls: 'menu' })));
   }
   function innCost() { const p = S().party; return Math.round(6 * p.reduce((a, id) => a + S().heroes[id].lv, 0) / p.length + 4); }
   function inn() {
@@ -331,13 +345,16 @@ const GAME = (() => {
     AUDIO.sfx('heal'); toast('Die Crew ist erholt. LP & FP vollständig.');
     SAVE.persist(); showNode();
   }
-  function shop() {
+  function shop(page = 0) {
+    current = 'shop';
     const rows = Object.entries(ITEMS).map(([k, it]) => el('div.shoprow', null,
-      el('span.si', null, it.i), el('div.sd', null, el('b', null, it.n), el('small', null, it.d), el('small.muted', null, `Im Besitz: ${S().items[k] || 0}`)),
-      btn(`${it.price} G`, () => { if (S().gold < it.price) return toast('Nicht genug Gold.'); S().gold -= it.price; S().items[k] = (S().items[k] || 0) + 1; AUDIO.sfx('coin'); SAVE.soon(); hud(NODES[S().node].n); shop(); }, 'small', { disabled: S().gold < it.price })));
-    panel(nav(null), header('🛒 Händler', `Gold: ${S().gold} G`), el('div.shop', null, rows), btn('◂ Zurück zum Hafen', () => showNode(), 'ghost wide'));
+      el('span.si', null, it.i), el('div.sd', null, el('b', null, it.n, el('small.muted', null, ` · ${S().items[k] || 0} im Besitz`)), el('small', null, it.d)),
+      btn(`${it.price} G`, () => { if (S().gold < it.price) return toast('Nicht genug Gold.'); S().gold -= it.price; S().items[k] = (S().items[k] || 0) + 1; AUDIO.sfx('coin'); SAVE.soon(); hud(NODES[S().node].n); shop(lastPage); }, 'small', { disabled: S().gold < it.price })));
+    let lastPage = page;
+    show('place', view('🛒 Händler', { back: showNode, right: `${S().gold} G` }, pager(rows, { cols: cols2(), page, onpage: p => { lastPage = p; } })));
   }
   function wharf() {
+    current = 'wharf';
     const rows = Object.entries(UPGRADES).map(([k, u]) => {
       const lv = S().up[k], max = lv >= u.max, cost = u.cost(lv);
       return el('div.shoprow', null, el('span.si', null, u.i),
@@ -345,9 +362,8 @@ const GAME = (() => {
         max ? el('b.muted', null, 'MAX') : btn(`${cost} G`, () => { if (S().gold < cost) return toast('Nicht genug Gold.'); S().gold -= cost; S().up[k]++; AUDIO.sfx('level'); SAVE.persist(); hud(NODES[S().node].n); wharf(); }, 'small', { disabled: S().gold < cost }));
     });
     const flags = ['#b8332e', '#2c5aa0', '#2f8a4a', '#d8a02a', '#7a3aa0', '#1b1622'];
-    panel(nav(null), header('⚒️ Werft & Schmiede', `Gold: ${S().gold} G`), el('div.shop', null, rows),
-      el('div.flags', null, el('small', null, 'Flaggenfarbe: '), flags.map(f => el('button.flag' + (S().up.flag === f ? '.on' : ''), { style: { background: f }, onclick: () => { S().up.flag = f; SAVE.soon(); wharf(); } }))),
-      btn('◂ Zurück zum Hafen', () => showNode(), 'ghost wide'));
+    rows.push(el('div.flags', null, el('small', null, 'Flagge:'), flags.map(f => el('button.flag' + (S().up.flag === f ? '.on' : ''), { style: { background: f }, 'aria-label': 'Flaggenfarbe', onclick: () => { S().up.flag = f; SAVE.soon(); wharf(); } }))));
+    show('place', view('⚒️ Werft', { back: showNode, right: `${S().gold} G` }, pager(rows, { cols: cols2() })));
   }
   async function tavern(n, recruits) {
     for (const r of recruits) {
@@ -363,13 +379,13 @@ const GAME = (() => {
   /* ---------- Gewässer ---------- */
   function water(n) {
     const wins = S().wins[n.id] || 0;
-    panel(nav(null), header(`🌊 ${n.n}`, n.d), partyStrip(),
-      el('div.progress', null, el('span', null, `Patrouillen: ${Math.min(wins, n.need)}/${n.need}`), bar(Math.min(wins, n.need), n.need, 'xp'),
-        el('small.muted', null, wins >= n.need ? 'Gebiet gesichert – der Weg ist frei. Weitere Kämpfe bringen EP & Gold.' : `Gewinne ${n.need} Kämpfe, um weiterzusegeln.`)),
-      el('div.menu-grid', null,
-        btn(el('span', null, '⚔️ Patrouille fahren', el('small', null, `Gegnerstufe ${n.lv[0]}–${n.lv[1]}`)), () => fight(n), 'gold'),
-        btn(el('span', null, '🎒 Taschen', el('small', null, 'Heilen vor dem Kampf')), () => go('bag')),
-        btn(el('span', null, '🗺️ Zur Karte', el('small', null, 'Weitersegeln')), () => go('map'))));
+    show('place', view(`🌊 ${n.n}`, { right: `${S().gold} G`, sub: n.d },
+      partyStrip(),
+      el('div.progress', null, el('span', null, `Patrouillen ${Math.min(wins, n.need)}/${n.need}`, el('small.muted', null, wins >= n.need ? ' · Gebiet gesichert, der Weg ist frei' : ` · ${n.need} Siege öffnen den Weg`)), bar(Math.min(wins, n.need), n.need, 'xp')),
+      pager([
+        tile('⚔️', 'Patrouille fahren', `Gegnerstufe ${n.lv[0]}–${n.lv[1]}`, () => fight(n), 'gold'),
+        tile('🗺️', 'Weitersegeln', 'Zur Weltkarte', () => go('map'))
+      ], { cols: 2, cls: 'menu' })));
   }
   function regionPrefer(n) { return S().mode === 'beide' ? (n.env.water === 'sea' ? 'S' : 'I') : null; }
   async function fight(n) {
@@ -377,6 +393,7 @@ const GAME = (() => {
     const cnt = Math.random() < 0.25 ? 1 : Math.random() < 0.6 ? 2 : 3;
     const enemies = [];
     for (let i = 0; i < cnt; i++) enemies.push({ key: n.mons[Math.floor(Math.random() * n.mons.length)], lv: n.lv[0] + Math.floor(Math.random() * (n.lv[1] - n.lv[0] + 1)) });
+    setNav(false);
     const r = await BATTLE.start({ enemies, env: n.env, node: n.id, prefer: regionPrefer(n) });
     afterBattle(n, r);
   }
@@ -409,61 +426,68 @@ const GAME = (() => {
   function bossNode(n) {
     const done = S().bosses[n.boss];
     const locked = n.needExam && !S().examPassed;
-    panel(nav(null), header(`☠️ ${n.n}`, n.d), partyStrip(),
-      el('div.bossinfo', null,
-        el('p', null, el('b', null, MONSTERS[n.boss].n), ` · Stufe ${n.lv}`),
-        done ? el('p.ok', null, '✔ Besiegt. Du kannst erneut herausfordern (Training).') : null,
-        locked ? el('p.warn', null, '🔒 Nur mit bestandener Prüfungssimulation (Prüfungsamt in einem Hafen oder unter „Lernen“).') : null),
-      el('div.menu-grid', null,
-        btn(el('span', null, '⚔️ Herausfordern', el('small', null, 'Bosskampf – keine Flucht')), async () => {
+    const note = locked ? '🔒 Erst nach bestandener Prüfungssimulation (Lernen → Prüfung).' : done ? '✔ Besiegt – erneut herausfordern ist möglich.' : `${MONSTERS[n.boss].n} · Stufe ${n.lv}`;
+    show('place', view(`☠️ ${n.n}`, { right: `${S().gold} G`, sub: n.d },
+      partyStrip(),
+      el('p.bossnote' + (locked ? '.warn' : done ? '.ok' : ''), null, note),
+      pager([
+        tile('⚔️', 'Herausfordern', 'Bosskampf – keine Flucht', async () => {
           if (locked) return toast('Bestehe zuerst die Prüfungssimulation!');
           await dialog(STORY[n.boss]);
+          setNav(false);
           const r = await BATTLE.start({ enemies: [{ key: n.boss, lv: n.lv }], env: n.env, node: n.id, boss: true, prefer: regionPrefer(n) });
           afterBattle(n, r);
         }, 'gold', { disabled: locked }),
-        btn(el('span', null, '🎒 Taschen', el('small', null, 'Vorbereiten')), () => go('bag')),
-        btn(el('span', null, '🗺️ Zur Karte', el('small', null, 'Lieber noch trainieren')), () => go('map'))));
+        tile('🗺️', 'Zur Karte', 'Lieber noch trainieren', () => go('map'))
+      ], { cols: 2, cls: 'menu' })));
   }
 
   /* ======================= Crew ======================= */
-  function showCrew() {
+  function showCrew(page = 0) {
+    current = 'crew';
     hud('Crew');
     const joined = HERO_ORDER.filter(id => S().heroes[id].joined);
+    let lastPage = page;
     const cards = joined.map(id => {
       const d = HEROES[id], h = S().heroes[id], st = BATTLE.heroStats(id), inP = S().party.includes(id);
       const hp = h.hp === null ? st.hp : h.hp;
-      return el('div.crew' + (inP ? '.in' : ''), null,
-        REAL.on() ? el('img.crew-photo', { src: REAL.avatar(id), alt: d.name }) : el('img.full', { src: SPRITES.full(id, 3), alt: d.name }),
-        el('div.cinfo', null,
-          el('div.cname', null, el('b', null, d.name), el('small', null, ` ${d.title} · Stufe ${h.lv}`)),
-          el('small.bio', null, d.bio),
-          el('div.cstats', null, `LP ${hp}/${st.hp} · FP ${st.sp} · ANG ${st.atk} · MAG ${st.mag} · ABW ${st.def} · TMP ${st.spd}`),
-          el('div.xp', null, el('small', null, `EP ${h.xp}/${BATTLE.xpNeed(h.lv)}`), bar(h.xp, BATTLE.xpNeed(h.lv), 'xp')),
-          el('div.cweap', null, 'Waffen: ', d.weapons.map(w => TYPES[w].i + ' ' + TYPES[w].n).join(', ')),
-          el('details', null, el('summary', null, 'Fähigkeiten'), el('ul', null, d.skills.map(s => el('li' + (h.lv >= s.lv ? '' : '.muted'), null, `${s.type ? TYPES[s.type].i + ' ' : ''}${s.n} (${s.sp} FP, ab Lv ${s.lv}) – ${s.d}`)))),
-          el('div.row.crew-btns', null, btn('✏️ Name ändern', () => renameHero(id), 'small ghost'), REAL.on() ? btn('📷 Foto & Name', () => REAL.setupScreen(showCrew), 'small ghost') : btn('🎨 Aussehen', () => lookEditor(id), 'small ghost'),
-          btn(inP ? '− Aus der Gruppe' : '+ In die Gruppe', () => {
-            if (inP) { if (S().party.length <= 1) return toast('Mindestens ein Held muss an Bord sein.'); S().party = S().party.filter(x => x !== id); }
-            else { if (S().party.length >= 4) return toast('Maximal 4 Helden in der aktiven Gruppe.'); S().party.push(id); }
-            SAVE.soon(); showCrew();
-          }, inP ? 'small ghost' : 'small'))));
+      const lv = h.lv;
+      return el('div.crew-card' + (inP ? '.in' : ''), null,
+        el('div.cc-pic', null,
+          REAL.on() ? el('img.crew-photo', { src: REAL.avatar(id), alt: '' }) : el('img.full', { src: SPRITES.full(id, 3), alt: '' }),
+          el('small.cc-badge' + (inP ? '.on' : ''), null, inP ? 'aktiv' : 'Reserve')),
+        el('div.cc-info', null,
+          el('div.cc-name', null, el('b', null, d.name), el('small', null, ` ${d.title} · Stufe ${lv}`)),
+          el('small.cc-bio', null, d.bio),
+          el('small.cc-stats', null, `LP ${hp}/${st.hp} · FP ${st.sp} · ANG ${st.atk} · MAG ${st.mag} · ABW ${st.def} · TMP ${st.spd}`),
+          el('div.xp', null, bar(h.xp, BATTLE.xpNeed(lv), 'xp')),
+          el('div.cc-skills', null, d.weapons.map(w => el('span.chip', null, TYPES[w].i + ' ' + TYPES[w].n)),
+            d.skills.map(s => el('span.chip' + (lv >= s.lv ? '' : '.locked'), { title: `${s.sp} FP · ${s.d}${lv >= s.lv ? '' : ` (ab Stufe ${s.lv})`}` }, (lv >= s.lv ? '' : '🔒 ') + s.n))),
+          el('div.cc-btns', null,
+            btn('✏️ Name', () => renameHero(id, lastPage), 'small ghost'),
+            REAL.on() ? btn('📷 Foto', () => go('opts', 'real'), 'small ghost') : btn('🎨 Aussehen', () => lookEditor(id, null, 'kopf', lastPage), 'small ghost'),
+            btn(inP ? '− Reserve' : '+ Aktiv', () => {
+              if (inP) { if (S().party.length <= 1) return toast('Mindestens ein Held muss an Bord sein.'); S().party = S().party.filter(x => x !== id); }
+              else { if (S().party.length >= 4) return toast('Maximal 4 Helden in der aktiven Gruppe.'); S().party.push(id); }
+              SAVE.soon(); showCrew(lastPage);
+            }, inP ? 'small ghost' : 'small'))));
     });
     const missing = HERO_ORDER.length - joined.length;
-    panel(nav('crew'), header('👥 Crew der Wellenpfad', `Aktive Gruppe: ${S().party.length}/4 · Reserve erhält 50 % EP`), cards,
-      missing ? el('p.muted.center', null, `Noch ${missing} Gefährten warten in Häfen entlang des Stroms …`) : null,
-      backToNode());
+    show('crew', view('👥 Crew', { right: `aktiv ${S().party.length}/4`, sub: missing ? `Noch ${missing} Gefährten warten in Häfen entlang des Stroms.` : 'Reserve erhält 50 % EP.' },
+      pager(cards, { cols: cols2(), page, onpage: p => { lastPage = p; } })));
   }
-  function renameHero(id) {
-    const inp = el('input.search', { id: 'hero-name', type: 'text', maxlength: 24, value: HEROES[id].name, autocomplete: 'off' });
-    const save = () => { SAVE.rename(id, inp.value); m.close(); toast(`Name gespeichert: ${HEROES[id].name}`); showCrew(); };
+  function renameHero(id, page) {
+    const inp = el('input.search', { id: 'hero-name', type: 'text', maxlength: 24, value: HEROES[id].name, autocomplete: 'off', 'aria-label': 'Name' });
+    const save = () => { SAVE.rename(id, inp.value); m.close(); toast(`Name gespeichert: ${HEROES[id].name}`); showCrew(page); };
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
     const m = overlay(el('div.pick', null, el('h3', null, `Neuer Name für ${HEROES[id].title}`),
-      el('p.small.muted', null, `Standardname: ${HEROES[id].orig}. Der Name wird nur in diesem Spielstand gespeichert.`), inp,
+      el('p.small.muted', null, `Standard: ${HEROES[id].orig}`), inp,
       el('div.row', null, btn('Standard', () => { inp.value = HEROES[id].orig; save(); }, 'ghost'), btn('Speichern', save, 'gold'))), { dismiss: true });
     setTimeout(() => inp.focus(), 50);
   }
   /* ---------- Charakter-Editor ---------- */
-  function lookEditor(id, look) {
+  function lookEditor(id, look, tab = 'kopf', crewPage = 0) {
+    current = 'editor';
     hud('Charakter-Editor');
     const P = SPRITES.PARTS, C = SPRITES.COLORS;
     look = look || Object.assign({}, (S().looks && S().looks[id]) || SPRITES.DEFAULT_LOOKS[id]);
@@ -478,54 +502,49 @@ const GAME = (() => {
     const redraw = () => { img.src = preview(); };
     const stepper = (label, key, names) => {
       const val = el('b.ed-val', null, names[look[key]]);
-      const go2 = d => { look[key] = (look[key] + d + names.length) % names.length; val.textContent = names[look[key]]; redraw(); AUDIO.sfx('select'); };
+      const step = d => { look[key] = (look[key] + d + names.length) % names.length; val.textContent = names[look[key]]; redraw(); AUDIO.sfx('select'); };
       return el('div.ed-row', null, el('span.ed-label', null, label),
-        el('button.ed-arrow', { 'aria-label': label + ' zurück', onclick: () => go2(-1) }, '◀'), val,
-        el('button.ed-arrow', { 'aria-label': label + ' weiter', onclick: () => go2(1) }, '▶'));
+        el('button.ed-arrow', { 'aria-label': label + ' zurück', onclick: () => step(-1) }, '◀'), val,
+        el('button.ed-arrow', { 'aria-label': label + ' weiter', onclick: () => step(1) }, '▶'));
     };
     const swatches = (label, key, list) => {
       const row = el('div.swatches');
-      const draw = () => row.replaceChildren(...list.map((c, i) => el('button.sw' + (look[key] === i ? '.on' : ''), { style: { background: c }, 'aria-label': `${label} Farbe ${i + 1}`, onclick: () => { look[key] = i; draw(); redraw(); } })));
+      const draw = () => row.replaceChildren(...list.map((c, i) => el('button.sw' + (look[key] === i ? '.on' : ''), { style: { background: c }, 'aria-label': `${label} ${i + 1}`, onclick: () => { look[key] = i; draw(); redraw(); } })));
       draw();
       return el('div.ed-colors', null, el('span.ed-label', null, label), row);
     };
+    let curTab = tab;
     const random = () => {
       const r = n => Math.floor(Math.random() * n);
-      look = { hair: r(P.hair.length), hairCol: r(C.hair.length), skin: r(C.skin.length), face: r(P.face.length), top: r(P.top.length), topCol: r(C.cloth.length), build: r(P.build.length), pants: r(P.pants.length), pantsCol: r(C.cloth.length), feet: r(P.feet.length), feetCol: r(C.cloth.length) };
-      lookEditor(id, look);
+      lookEditor(id, { hair: r(P.hair.length), hairCol: r(C.hair.length), skin: r(C.skin.length), face: r(P.face.length), top: r(P.top.length), topCol: r(C.cloth.length), build: r(P.build.length), pants: r(P.pants.length), pantsCol: r(C.cloth.length), feet: r(P.feet.length), feetCol: r(C.cloth.length) }, curTab, crewPage);
     };
-    panel(header(`🎨 ${HEROES[id].name}`, `${HEROES[id].title} – stelle Frisur, Kopf, Oberkörper, Körperbau, Hose und Schuhe zusammen.`),
-      el('div.editor', null,
-        el('div.ed-stage', null, img, el('small.muted', null, `Waffe: ${TYPES[wtype].i} ${TYPES[wtype].n}`)),
-        el('div.ed-controls', null,
-          el('h3', null, 'Kopf'),
-          stepper('Frisur', 'hair', P.hair), swatches('Haarfarbe', 'hairCol', C.hair),
-          stepper('Gesicht', 'face', P.face), swatches('Hautton', 'skin', C.skin),
-          el('h3', null, 'Körper'),
-          stepper('Oberkörper', 'top', P.top), swatches('Farbe Oberteil', 'topCol', C.cloth),
-          stepper('Körperbau', 'build', P.build),
-          el('h3', null, 'Beine'),
-          stepper('Hose', 'pants', P.pants), swatches('Farbe Hose', 'pantsCol', C.cloth),
-          stepper('Füße', 'feet', P.feet), swatches('Farbe Schuhe', 'feetCol', C.cloth))),
-      el('div.row', null,
-        btn('🎲 Zufall', random, 'ghost'),
-        btn('↺ Standard', () => { SAVE.setLook(id, null); toast('Standard-Aussehen wiederhergestellt.'); showCrew(); }, 'ghost')),
-      el('div.row', null,
-        btn('Abbrechen', () => showCrew(), 'ghost'),
-        btn('✔ Speichern', () => { SAVE.setLook(id, look); AUDIO.sfx('level'); toast('Aussehen gespeichert.'); showCrew(); }, 'gold')));
+    show('crew', view(`🎨 ${HEROES[id].name}`, { back: () => showCrew(crewPage), right: `${TYPES[wtype].i} ${TYPES[wtype].n}` },
+      el('div.editor2', null,
+        el('div.ed-stage', null, img),
+        tabs([
+          { id: 'kopf', label: 'Kopf', render: () => el('div.ed-controls', null, stepper('Frisur', 'hair', P.hair), swatches('Haare', 'hairCol', C.hair), stepper('Gesicht', 'face', P.face), swatches('Haut', 'skin', C.skin)) },
+          { id: 'koerper', label: 'Körper', render: () => el('div.ed-controls', null, stepper('Oberteil', 'top', P.top), swatches('Farbe', 'topCol', C.cloth), stepper('Körperbau', 'build', P.build)) },
+          { id: 'hose', label: 'Hose', render: () => el('div.ed-controls', null, stepper('Hose', 'pants', P.pants), swatches('Farbe', 'pantsCol', C.cloth)) },
+          { id: 'fuesse', label: 'Füße', render: () => el('div.ed-controls', null, stepper('Füße', 'feet', P.feet), swatches('Farbe', 'feetCol', C.cloth)) }
+        ], tab, t => { curTab = t; })),
+      el('div.row.ed-actions', null,
+        btn('🎲 Zufall', random, 'ghost small'),
+        btn('↺ Standard', () => { SAVE.setLook(id, null); toast('Standard-Aussehen wiederhergestellt.'); showCrew(crewPage); }, 'ghost small'),
+        btn('✔ Speichern', () => { SAVE.setLook(id, look); AUDIO.sfx('level'); toast('Aussehen gespeichert.'); showCrew(crewPage); }, 'gold small'))));
   }
-  function backToNode() { return btn(`◂ Zurück: ${NODES[S().node].n}`, () => enterNode(S().node), 'ghost wide'); }
 
   /* ======================= Taschen ======================= */
   function showBag() {
+    current = 'bag';
     hud('Taschen');
     const usable = ['trank', 'grosstrank', 'aether', 'ring', 'proviant'];
     const rows = Object.entries(S().items).filter(([, n]) => n > 0).map(([k, n]) => {
       const it = ITEMS[k];
       return el('div.shoprow', null, el('span.si', null, it.i), el('div.sd', null, el('b', null, `${it.n} ×${n}`), el('small', null, it.d)),
-        usable.includes(k) ? btn('Benutzen', () => useField(k), 'small') : el('small.muted', null, 'nur im Kampf'));
+        usable.includes(k) ? btn('Benutzen', () => useField(k), 'small') : el('small.muted', null, 'im Kampf'));
     });
-    panel(nav('bag'), header('🎒 Taschen', `Gold: ${S().gold} G`), partyStrip(), rows.length ? el('div.shop', null, rows) : el('p.muted', null, 'Die Taschen sind leer.'), backToNode());
+    show('bag', view('🎒 Taschen', { right: `${S().gold} G` }, partyStrip(),
+      rows.length ? pager(rows, { cols: cols2() }) : el('p.muted', null, 'Die Taschen sind leer. Händler gibt es in jedem Hafen.')));
   }
   function useField(k) {
     const it = ITEMS[k];
@@ -546,62 +565,62 @@ const GAME = (() => {
 
   /* ======================= Lernen ======================= */
   function showLearn() {
+    current = 'learn';
     hud('Lernen');
     const M = SAVE.mastery();
     const weak = SAVE.pool().filter(q => { const r = S().q[q.id]; return r && r.w > 0 && r.b <= 1; });
-    panel(nav('learn'), header('📚 Lernzentrum', `${SAVE.MODES[S().mode].n}${S().segeln ? ' + Segeln' : ''} · ${M.learned}/${M.total} Fragen sicher (Fach ≥ 3)`),
-      el('div.menu-grid', null,
-        btn(el('span', null, '⚡ Schnelltraining', el('small', null, '10 Fragen nach Lernkartei · 3 G pro richtige')), () => training(null, 10)),
-        btn(el('span', null, '🎯 Problemfragen', el('small', null, `${weak.length} Fragen mit Fehlern`)), () => weak.length ? training(QUIZ.shuffle(weak.slice()).slice(0, 15), 15) : toast('Keine Problemfragen – stark!'), '', { disabled: !weak.length }),
-        btn(el('span', null, '🆕 Neue Fragen', el('small', null, `${M.unseen} noch nie gesehen`)), () => {
+    show('learn', view('📚 Lernen', { right: `${M.learned}/${M.total} sicher`, sub: `${SAVE.MODES[S().mode].n}${S().segeln ? ' + Segeln' : ''} · „sicher“ = Fach 3 oder höher` },
+      pager([
+        tile('⚡', 'Schnelltraining', '10 Fragen · 3 G pro richtige', () => training(null, 10)),
+        tile('🎯', 'Problemfragen', `${weak.length} mit Fehlern`, () => weak.length ? training(QUIZ.shuffle(weak.slice()).slice(0, 15), 15) : toast('Keine Problemfragen – stark!'), '', { disabled: !weak.length }),
+        tile('🆕', 'Neue Fragen', `${M.unseen} ungesehen`, () => {
           const un = SAVE.pool().filter(q => !S().q[q.id]); if (!un.length) return toast('Alle Fragen gesehen!');
           training(QUIZ.shuffle(un).slice(0, 10), 10);
         }),
-        btn(el('span', null, '📜 Prüfungssimulation', el('small', null, S().examPassed ? 'Bereits bestanden ✔' : '30 Fragen · ab 24 bestanden')), examOffice, 'gold'),
-        btn(el('span', null, '🔎 Fragenkatalog', el('small', null, 'Alle Fragen & Antworten durchsuchen')), () => catalog())),
-      backToNode());
+        tile('📜', 'Prüfung', S().examPassed ? 'Bestanden ✔' : '30 Fragen · ab 24', examOffice, 'gold'),
+        tile('🔎', 'Fragenkatalog', 'Alle Fragen & Lösungen', () => catalog())
+      ], { cols: 2, cls: 'menu' })));
   }
   async function training(list, n) {
     let ok = 0;
-    for (let i = 0; i < n; i++) {
-      const q = list ? list[i] : null;
-      if (list && !q) break;
-      panel(header('Training', `Frage ${i + 1} von ${list ? Math.min(n, list.length) : n} · ${ok} richtig`));
-      const r = await QUIZ.ask({ q, context: `Training ${i + 1}/${list ? Math.min(n, list.length) : n}`, autoClose: true });
+    const total = list ? Math.min(n, list.length) : n;
+    for (let i = 0; i < total; i++) {
+      show('learn', view('Training', { sub: `Frage ${i + 1} von ${total} · ${ok} richtig` }));
+      const r = await QUIZ.ask({ q: list ? list[i] : null, context: `Training ${i + 1}/${total}`, autoClose: true });
       if (r.ok) { ok++; S().gold += 3; }
     }
     SAVE.persist();
-    const total = list ? Math.min(n, list.length) : n;
-    panel(header('Training beendet', `${ok} von ${total} richtig · +${ok * 3} G`),
-      el('div.result', null, el('div.big', null, `${Math.round(ok / total * 100)} %`), btn('Nochmal', () => training(list ? QUIZ.shuffle(list.slice()) : null, n), 'gold wide'), btn('◂ Lernzentrum', () => go('learn'), 'ghost wide')));
+    show('learn', view('Training beendet', { back: () => go('learn') },
+      el('div.result', null, el('div.big', null, `${Math.round(ok / total * 100)} %`), el('p', null, `${ok} von ${total} richtig · +${ok * 3} G`),
+        btn('Nochmal', () => training(list ? QUIZ.shuffle(list.slice()) : null, n), 'gold wide'))));
   }
 
-  function catalog(filter = { s: 'all', q: '', only: 'all' }) {
+  function catalog(filter = { s: 'all', q: '', only: 'all' }, page = 0) {
+    current = 'catalog';
     hud('Fragenkatalog');
     const P = SAVE.pool();
     const secs = [...new Set(P.map(q => q.s))];
-    const out = el('div.catlist');
-    const renderList = () => {
+    const listBox = el('div.catbox');
+    let lastPage = page;
+    const renderList = (pg = 0) => {
       const term = filter.q.trim().toLowerCase();
       const items = P.filter(q => (filter.s === 'all' || q.s === filter.s)
         && (!term || (q.q + ' ' + q.a[0]).toLowerCase().includes(term) || String(q.n) === term)
         && (filter.only === 'all' || (filter.only === 'weak' ? (S().q[q.id] && S().q[q.id].b <= 1 && S().q[q.id].w > 0) : filter.only === 'new' ? !S().q[q.id] : S().q[q.id] && S().q[q.id].b >= 3)));
-      out.replaceChildren(el('small.muted', null, `${items.length} Fragen`), ...items.slice(0, 200).map(q => {
+      const rows = items.map(q => {
         const r = S().q[q.id];
-        return el('details.cq', null,
-          el('summary', null, el('span.tag.sec-' + q.s, null, `${QUIZ.SEC_LABEL[q.s]} ${q.n}`), r ? el('span.tag.box.b' + r.b, null, `Fach ${r.b}`) : el('span.tag.box', null, 'neu'), ' ', q.q),
-          QUIZ.imgs(q),
-          el('div.cqa', null, el('b', null, '✔ '), q.a[0]),
-          el('details.wrongs', null, el('summary', null, 'Falsche Antwortoptionen'), el('ul', null, q.a.slice(1).map(a => el('li', null, a)))),
-          r ? el('small.muted', null, `${r.c}× richtig, ${r.w}× falsch`) : null,
-          btn('Diese Frage üben', async () => { await QUIZ.ask({ q, context: 'Katalog', autoClose: false }); catalog(filter); }, 'small'));
-      }), items.length > 200 ? el('small.muted', null, 'Nur die ersten 200 Treffer – Suche verfeinern.') : null);
+        return el('button.qrow', { onclick: () => QUIZ.detail(q, { onpractice: () => catalog(filter, lastPage) }) },
+          el('span.qr-tags', null, el('span.tag.sec-' + q.s, null, `${QUIZ.SEC_LABEL[q.s]} ${q.n}`), r ? el('span.tag.box.b' + r.b, null, `F${r.b}`) : null, q.img ? el('span.tag', null, '🖼') : null),
+          el('span.qr-text', null, q.q));
+      });
+      listBox.replaceChildren(el('small.muted.count', null, `${items.length} Fragen`), rows.length ? pager(rows, { cols: cols2(), page: pg, onpage: p => { lastPage = p; } }) : el('p.muted', null, 'Keine Treffer.'));
     };
-    const search = el('input.search', { type: 'search', placeholder: 'Suchen (Text oder Nummer) …', value: filter.q, oninput: e => { filter.q = e.target.value; renderList(); } });
-    const sel = el('select', { onchange: e => { filter.s = e.target.value; renderList(); } }, el('option', { value: 'all' }, 'Alle Bereiche'), secs.map(s => el('option', { value: s, selected: filter.s === s }, SAVE.SECTION_NAMES[s])));
-    const only = el('select', { onchange: e => { filter.only = e.target.value; renderList(); } }, [['all', 'Alle'], ['weak', 'Problemfragen'], ['new', 'Ungesehen'], ['good', 'Sicher (Fach ≥ 3)']].map(([v, l]) => el('option', { value: v, selected: filter.only === v }, l)));
-    panel(nav('learn'), header('🔎 Fragenkatalog', 'Amtliche Fragen mit richtiger Antwort'), el('div.filters', null, search, sel, only), out, btn('◂ Lernzentrum', () => go('learn'), 'ghost wide'));
-    renderList();
+    let tmr;
+    const search = el('input.search', { type: 'search', id: 'cat-search', placeholder: 'Suchen …', 'aria-label': 'Fragen durchsuchen', value: filter.q, oninput: e => { filter.q = e.target.value; clearTimeout(tmr); tmr = setTimeout(() => renderList(0), 200); } });
+    const sel = el('select', { id: 'cat-sec', 'aria-label': 'Bereich', onchange: e => { filter.s = e.target.value; renderList(0); } }, el('option', { value: 'all' }, 'Alle Bereiche'), secs.map(s => el('option', { value: s, selected: filter.s === s }, SAVE.SECTION_NAMES[s])));
+    const only = el('select', { id: 'cat-only', 'aria-label': 'Filter', onchange: e => { filter.only = e.target.value; renderList(0); } }, [['all', 'Alle'], ['weak', 'Problemfragen'], ['new', 'Ungesehen'], ['good', 'Sicher']].map(([v, l]) => el('option', { value: v, selected: filter.only === v }, l)));
+    show('learn', view('🔎 Fragenkatalog', { back: () => go('learn') }, el('div.filters', null, search, sel, only), listBox));
+    renderList(page);
   }
 
   /* ---------- Prüfungssimulation ---------- */
@@ -613,14 +632,14 @@ const GAME = (() => {
       });
       if (!kind) return;
     }
-    const ok = await confirm(`Prüfungssimulation ${SAVE.MODES[kind].n}: 30 Fragen (7 Basisfragen + 23 spezifische). Wie in der echten Prüfung gibt es erst am Ende eine Auswertung. Bestanden ab 24 richtigen Antworten.`, 'Prüfung starten');
+    const ok = await confirm(`Prüfungssimulation ${SAVE.MODES[kind].n}: 30 Fragen (7 Basis + 23 spezifische). Auswertung erst am Ende, bestanden ab 24 richtigen.`, 'Prüfung starten');
     if (!ok) return;
     const comp = SAVE.MODES[kind].exam, qs = [];
     for (const [sec, cnt] of Object.entries(comp)) qs.push(...QUIZ.shuffle(window.QUESTIONS.filter(q => q.s === sec)).slice(0, cnt));
     const answers = [];
     for (let i = 0; i < qs.length; i++) {
-      const choice = await examQuestion(qs[i], i, qs.length);
-      if (choice === null) return showNode();
+      const choice = await QUIZ.exam(qs[i], i, qs.length);
+      if (choice === null) return go(current === 'learn' ? 'learn' : 'place');
       answers.push(choice);
     }
     const right = answers.filter(a => a.ok).length, pass = right >= 24;
@@ -630,96 +649,99 @@ const GAME = (() => {
     if (pass && !S().examPassed) { S().examPassed = true; reward = 300; S().gold += reward; }
     SAVE.persist();
     AUDIO.sfx(pass ? 'win' : 'wrong');
-    panel(header(pass ? '🎉 Bestanden!' : '❌ Nicht bestanden', `${right} von ${qs.length} richtig (mind. 24 nötig)${reward ? ` · Belohnung: ${reward} G · Leuchtturmklippe freigegeben` : ''}`),
-      el('div.result', null, el('div.big' + (pass ? '.okc' : '.badc'), null, `${right}/30`)),
-      el('h3', null, 'Auswertung'),
-      el('div.examlist', null, answers.map((a, i) => el('details.cq' + (a.ok ? '.ok' : '.bad'), null,
-        el('summary', null, a.ok ? '✔ ' : '✘ ', `${i + 1}. `, a.q.q),
-        QUIZ.imgs(a.q),
-        !a.ok ? el('div.cqw', null, el('b', null, 'Deine Antwort: '), a.text) : null,
-        el('div.cqa', null, el('b', null, 'Richtig: '), a.q.a[0])))),
-      btn('◂ Zurück', () => showNode(), 'gold wide'));
+    examResult(answers, right, pass, reward);
   }
-  function examQuestion(q, i, total) {
-    return new Promise(res => {
-      const order = QUIZ.shuffle([0, 1, 2, 3]);
-      let sel = -1;
-      const btns = order.map((oi, k) => el('button.ans', { onclick: () => { sel = k; btns.forEach((b, j) => b.classList.toggle('sel', j === k)); next.disabled = false; AUDIO.sfx('select'); } }, el('b', null, 'ABCD'[k]), el('span', null, q.a[oi])));
-      const next = btn(i + 1 < total ? 'Nächste Frage ▸' : 'Abgeben ▸', () => res({ q, ok: order[sel] === 0, text: q.a[order[sel]] }), 'gold', { disabled: true });
-      panel(el('div.exam', null,
-        el('div.exam-head', null, el('b', null, `Prüfung · Frage ${i + 1}/${total}`), btn('Abbrechen', async () => { if (await confirm('Prüfung abbrechen? Der Fortschritt dieser Prüfung geht verloren.', 'Abbrechen', 'Weiter prüfen')) res(null); }, 'small ghost')),
-        bar(i, total, 'xp'),
-        el('div.quiz-q', null, q.q), QUIZ.imgs(q), el('div.quiz-answers', null, btns), next));
-    });
+  function examResult(answers, right, pass, reward) {
+    current = 'exam';
+    const rows = answers.map((a, i) => el('button.qrow.' + (a.ok ? 'ok' : 'bad'), { onclick: () => QUIZ.detail(a.q, { yours: a.text }) },
+      el('span.qr-tags', null, el('span.tag' + (a.ok ? '.good' : '.bad'), null, `${a.ok ? '✔' : '✘'} ${i + 1}`)), el('span.qr-text', null, a.q.q)));
+    show('learn', view(pass ? '🎉 Bestanden!' : '❌ Nicht bestanden', { back: () => go('learn'), right: `${right}/30`, sub: `Mindestens 24 richtige nötig${reward ? ` · +${reward} G · Leuchtturmklippe freigegeben` : ''} · Antippen zeigt die Lösung` },
+      pager(rows, { cols: cols2() })));
   }
 
   /* ======================= Statistik ======================= */
-  function showStats() {
+  function showStats(tab) {
+    current = 'stats';
     hud('Statistik');
     const st = S().stats, M = SAVE.mastery();
     const pct = Math.round(st.correct / Math.max(1, st.answered) * 100);
-    const tiles = [['Antworten', st.answered], ['Trefferquote', pct + ' %'], ['Beste Serie', st.bestStreak], ['Sicher gelernt', `${M.learned}/${M.total}`], ['Kämpfe gewonnen', `${st.won}/${st.battles}`], ['Monster besiegt', st.kills], ['Gold verdient', st.goldEarned], ['Spielzeit', Math.round(st.play / 60) + ' min']];
-    const maxBox = Math.max(1, M.unseen, ...M.boxes);
-    const days = [];
-    for (let i = 13; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); days.push([d, st.days[k] || { a: 0, c: 0 }]); }
-    const maxDay = Math.max(1, ...days.map(([, v]) => v.a));
-    const worst = Object.entries(S().q).filter(([, r]) => r.w > 0).sort((a, b) => (b[1].w - b[1].c * 0.5) - (a[1].w - a[1].c * 0.5)).slice(0, 10);
-    panel(nav('stats'), header('📊 Lernstatistik', `${SAVE.MODES[S().mode].n}${S().segeln ? ' + Segeln' : ''}`),
-      el('div.tiles', null, tiles.map(([k, v]) => el('div.tile', null, el('b', null, v), el('small', null, k)))),
-      el('h3', null, 'Lernkartei (Leitner-Fächer)'),
-      el('div.boxes', null, [['neu', M.unseen, 'bx-n'], ...M.boxes.map((v, i) => [`Fach ${i}`, v, 'bx-' + i])].map(([k, v, c]) =>
-        el('div.bx', null, el('div.bxbar', null, el('i.' + c, { style: { height: (v / maxBox * 100) + '%' } })), el('b', null, v), el('small', null, k)))),
-      el('p.muted.small', null, 'Fach 0 = zuletzt falsch beantwortet · Fach 5 = mehrfach in Folge richtig. Ziel: alle Fragen in Fach ≥ 3.'),
-      el('h3', null, 'Fortschritt nach Bereich'),
-      el('div.secs', null, Object.entries(M.bySec).map(([s, v]) => el('div.secrow', null,
-        el('div.sechead', null, el('b', null, SAVE.SECTION_NAMES[s]), el('small', null, `${v.learned}/${v.total} sicher · ${v.seen} gesehen · ${Math.round(v.c / Math.max(1, v.c + v.w) * 100)} % richtig`)),
-        el('div.stack', null, el('i.learned', { style: { width: (v.learned / v.total * 100) + '%' } }), el('i.seen', { style: { width: ((v.seen - v.learned) / v.total * 100) + '%' } }))))),
-      el('h3', null, 'Aktivität (14 Tage)'),
-      el('div.days', null, days.map(([d, v]) => el('div.day', { title: `${d.toLocaleDateString('de-DE')}: ${v.a} Antworten, ${v.c} richtig` },
-        el('div.dbar', null, el('i.da', { style: { height: (v.a / maxDay * 100) + '%' } }, el('i.dc', { style: { height: (v.c / Math.max(1, v.a) * 100) + '%' } }))),
-        el('small', null, d.toLocaleDateString('de-DE', { weekday: 'narrow' }))))),
-      el('h3', null, 'Prüfungssimulationen'),
-      st.exams.length ? el('div.exams', null, st.exams.slice(-8).reverse().map(e => el('div.exrow' + (e.pass ? '.ok' : '.bad'), null,
-        el('span', null, new Date(e.d).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })), el('span', null, SAVE.MODES[e.kind].n), el('b', null, `${e.right}/${e.total} ${e.pass ? '✔' : '✘'}`)))) : el('p.muted', null, 'Noch keine Prüfung abgelegt.'),
-      el('h3', null, 'Top 10 Problemfragen'),
-      worst.length ? el('div.worst', null, worst.map(([id, r]) => { const q = SAVE.QMAP[id]; return el('details.cq', null, el('summary', null, el('span.tag.bad', null, `${r.w}✘ ${r.c}✔`), ' ', q.q), QUIZ.imgs(q), el('div.cqa', null, el('b', null, '✔ '), q.a[0])); }),
-        btn('🎯 Diese Fragen jetzt üben', () => training(worst.map(([id]) => SAVE.QMAP[id]), worst.length), 'gold wide')) : el('p.muted', null, 'Noch keine Fehler – weiter so!'),
-      backToNode());
+    const overview = () => {
+      const tiles = [['Antworten', st.answered], ['Trefferquote', pct + ' %'], ['Beste Serie', st.bestStreak], ['Sicher', `${M.learned}/${M.total}`], ['Siege', `${st.won}/${st.battles}`], ['Monster', st.kills], ['Gold verdient', st.goldEarned], ['Spielzeit', Math.round(st.play / 60) + ' min']];
+      const maxBox = Math.max(1, M.unseen, ...M.boxes);
+      return el('div.stats-ov', null,
+        el('div.tiles', null, tiles.map(([k, v]) => el('div.tile', null, el('b', null, v), el('small', null, k)))),
+        el('div.boxes', { title: 'Fach 0 = zuletzt falsch · Fach 5 = mehrfach richtig' }, [['neu', M.unseen, 'bx-n'], ...M.boxes.map((v, i) => [`F${i}`, v, 'bx-' + i])].map(([k, v, c]) =>
+          el('div.bx', null, el('div.bxbar', null, el('i.' + c, { style: { height: (v / maxBox * 100) + '%' } })), el('b', null, v), el('small', null, k)))));
+    };
+    const progress = () => {
+      const days = [];
+      for (let i = 13; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); days.push([d, st.days[k] || { a: 0, c: 0 }]); }
+      const maxDay = Math.max(1, ...days.map(([, v]) => v.a));
+      return el('div.stats-pr', null,
+        el('div.secs', null, Object.entries(M.bySec).map(([s, v]) => el('div.secrow', null,
+          el('div.sechead', null, el('b', null, SAVE.SECTION_NAMES[s]), el('small', null, `${v.learned}/${v.total} sicher · ${Math.round(v.c / Math.max(1, v.c + v.w) * 100)} %`)),
+          el('div.stack', null, el('i.learned', { style: { width: (v.learned / v.total * 100) + '%' } }), el('i.seen', { style: { width: ((v.seen - v.learned) / v.total * 100) + '%' } }))))),
+        el('small.muted', null, 'Aktivität der letzten 14 Tage (grün = richtig)'),
+        el('div.days', null, days.map(([d, v]) => el('div.day', { title: `${d.toLocaleDateString('de-DE')}: ${v.a} Antworten, ${v.c} richtig` },
+          el('div.dbar', null, el('i.da', { style: { height: (v.a / maxDay * 100) + '%' } }, el('i.dc', { style: { height: (v.c / Math.max(1, v.a) * 100) + '%' } }))),
+          el('small', null, d.toLocaleDateString('de-DE', { weekday: 'narrow' }))))));
+    };
+    const exams = () => st.exams.length
+      ? pager(st.exams.slice().reverse().map(e => el('div.exrow' + (e.pass ? '.ok' : '.bad'), null,
+          el('span', null, new Date(e.d).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })), el('span', null, SAVE.MODES[e.kind].n), el('b', null, `${e.right}/${e.total} ${e.pass ? '✔' : '✘'}`))))
+      : el('p.muted', null, 'Noch keine Prüfung abgelegt. Unter „Lernen“ findest du die Prüfungssimulation.');
+    const worst = () => {
+      const w = Object.entries(S().q).filter(([, r]) => r.w > 0).sort((a, b) => (b[1].w - b[1].c * 0.5) - (a[1].w - a[1].c * 0.5)).slice(0, 10);
+      if (!w.length) return el('p.muted', null, 'Noch keine Fehler – weiter so!');
+      return el('div.worstbox', null,
+        btn('🎯 Diese 10 Fragen üben', () => training(w.map(([id]) => SAVE.QMAP[id]), w.length), 'gold wide'),
+        pager(w.map(([id, r]) => { const q = SAVE.QMAP[id]; return el('button.qrow', { onclick: () => QUIZ.detail(q) }, el('span.qr-tags', null, el('span.tag.bad', null, `${r.w}✘ ${r.c}✔`)), el('span.qr-text', null, q.q)); }), { cols: cols2() }));
+    };
+    show('stats', view('📊 Statistik', { right: `${pct} % richtig` },
+      tabs([{ id: 'ov', label: 'Überblick', render: overview }, { id: 'pr', label: 'Fortschritt', render: progress }, { id: 'ex', label: 'Prüfungen', render: exams }, { id: 'wo', label: 'Problemfragen', render: worst }], tab)));
   }
 
   /* ======================= Optionen ======================= */
-  function showOptions() {
+  function showOptions(tab) {
+    current = 'opts';
     hud('Optionen');
     const st = S().settings;
-    const tog = (k, label, sub, fn) => el('label.opt', null, el('input', { type: 'checkbox', checked: st[k], onchange: e => { st[k] = e.target.checked; fn && fn(st[k]); SAVE.soon(); } }), el('span', null, label, el('small', null, sub)));
-    panel(nav('opts'), header('⚙️ Optionen'),
-      el('div.opts', null,
-        tog('music', 'Musik', 'Chiptune-Soundtrack', v => AUDIO.setMusic(v)),
-        tog('sfx', 'Soundeffekte', '', v => AUDIO.setSfx(v)),
-        tog('speed', 'Tempo-Bonus', 'Zeitleiste in der Quizkarte, +20 % Schaden bei Antwort < 15 s'),
-        tog('defendQ', 'Abwehrfragen', 'Bei Gewaltangriffen halbiert eine richtige Antwort den Schaden'),
-        el('label.opt', null, el('span', null, 'Textgröße Fragen'), el('select', { onchange: e => { st.textSize = +e.target.value; SAVE.soon(); } }, [[0.9, 'Klein'], [1, 'Normal'], [1.12, 'Groß'], [1.25, 'Sehr groß']].map(([v, l]) => el('option', { value: v, selected: st.textSize === v }, l)))),
-        el('label.opt', null, el('input', { type: 'checkbox', checked: S().segeln, onchange: e => { S().segeln = e.target.checked; SAVE.soon(); } }), el('span', null, 'Segelfragen einbeziehen', el('small', null, '47 Zusatzfragen „Segeln Binnen“'))),
-        el('label.opt', null, el('span', null, 'Lernmodus'), el('select', { onchange: e => { S().mode = e.target.value; SAVE.soon(); } }, Object.entries(SAVE.MODES).map(([k, m]) => el('option', { value: k, selected: S().mode === k }, m.n))))),
-      el('h3', null, 'Reaktionen'),
-      el('div.menu-grid', null, btn(el('span', null, '💬 Eigene Reaktionstexte', el('small', null, `${(S().lines && S().lines.pos.length) || 0} positive · ${(S().lines && S().lines.neg.length) || 0} negative`)), () => REAL.textScreen(() => go('opts')))),
-      el('h3', null, 'Realmodus'),
-      el('div.menu-grid', null, btn(el('span', null, `📷 Realmodus ${st.realMode ? 'an' : 'aus'}`, el('small', null, 'Eigene Fotos & Reaktionsbilder, keine Pixelgrafik')), () => REAL.setupScreen(() => go('opts')), st.realMode ? 'gold' : '')),
-      el('h3', null, 'Spielstand'),
-      el('div.menu-grid', null,
-        btn('💾 Jetzt speichern', () => { SAVE.persist(); toast('Gespeichert.'); }),
-        btn('📤 Exportieren', () => {
-          const txt = el('textarea.export', { readonly: true, id: 'export-json' }, SAVE.exportJSON());
-          const m = overlay(el('div.pick', null, el('h3', null, 'Spielstand exportieren'),
-            el('p.small.muted', null, 'Kopiere den Text und speichere ihn als .json-Datei. Über „Importieren“ lädst du ihn wieder.'), txt,
-            el('div.row', null, btn('Schließen', () => m.close(), 'ghost'), btn('📋 Kopieren', () => {
-              navigator.clipboard.writeText(txt.value).then(() => toast('In die Zwischenablage kopiert.'), () => { txt.select(); toast('Text markiert – bitte manuell kopieren.'); });
-            }, 'gold'))), { dismiss: true });
-        }),
-        btn('📥 Importieren', () => importSave()),
-        btn('🏠 Titelbildschirm', () => { SAVE.persist(); go('title'); }, 'ghost')),
-      el('p.fine', null, 'Fragen & Abbildungen: Amtliche Fragenkataloge für die Sportbootführerscheine Binnen und See, bereitgestellt vom Bundesministerium für Digitales und Verkehr auf ELWIS (Stand 01.08.2023). Für die echte Prüfung bitte stets den aktuellen amtlichen Katalog prüfen.'),
-      backToNode());
+    const tog = (k, label, sub, fn) => el('label.opt', null, el('input', { type: 'checkbox', id: 'opt-' + k, checked: st[k], onchange: e => { st[k] = e.target.checked; fn && fn(st[k]); SAVE.soon(); } }), el('span', null, label, sub ? el('small', null, sub) : null));
+    const general = () => pager([
+      tog('music', 'Musik', null, v => AUDIO.setMusic(v)),
+      tog('sfx', 'Soundeffekte', null, v => AUDIO.setSfx(v)),
+      tog('speed', 'Tempo-Bonus', '+20 % Schaden bei Antwort unter 15 s'),
+      tog('defendQ', 'Abwehrfragen', 'Richtige Antwort halbiert Gewaltangriffe'),
+      el('label.opt', null, el('input', { type: 'checkbox', id: 'opt-segeln', checked: S().segeln, onchange: e => { S().segeln = e.target.checked; SAVE.soon(); } }), el('span', null, 'Segelfragen', el('small', null, '47 Zusatzfragen „Segeln Binnen“'))),
+      el('label.opt', null, el('span', null, 'Lernmodus'), el('select', { id: 'opt-mode', onchange: e => { S().mode = e.target.value; SAVE.soon(); } }, Object.entries(SAVE.MODES).map(([k, m]) => el('option', { value: k, selected: S().mode === k }, m.n)))),
+      el('label.opt', null, el('span', null, 'Textgröße Fragen'), el('select', { id: 'opt-text', onchange: e => { st.textSize = +e.target.value; SAVE.soon(); } }, [[0.9, 'Klein'], [1, 'Normal'], [1.12, 'Groß'], [1.25, 'Sehr groß']].map(([v, l]) => el('option', { value: v, selected: st.textSize === v }, l))))
+    ], { cols: cols2() });
+    const saveTab = () => pager([
+      tile('💾', 'Jetzt speichern', `Spielstand ${SAVE.slot} · speichert auch automatisch`, () => { SAVE.persist(); toast('Gespeichert.'); }),
+      tile('📤', 'Exportieren', 'In die Zwischenablage kopieren', exportSave),
+      tile('📥', 'Importieren', 'Spielstand-Datei laden', () => importSave()),
+      tile('🏠', 'Titelbildschirm', 'Spielstand wechseln', () => { SAVE.persist(); go('title'); }),
+      el('p.fine', null, 'Fragen & Abbildungen: amtliche Fragenkataloge (BMDV, ELWIS, Stand 01.08.2023). Für die echte Prüfung den aktuellen Katalog prüfen.')
+    ], { cols: cols2(), cls: 'menu' });
+    show('opts', view('⚙️ Optionen', null,
+      tabs([
+        { id: 'gen', label: 'Allgemein', render: general },
+        { id: 'real', label: 'Realmodus', render: () => REAL.realTab(() => showOptions('real')) },
+        { id: 'react', label: 'Reaktionen', render: () => REAL.reactTab(() => showOptions('react')) },
+        { id: 'save', label: 'Spielstand', render: saveTab }
+      ], tab)));
+  }
+  function exportSave() {
+    const json = SAVE.exportJSON();
+    const fallback = () => {
+      const txt = el('textarea.export', { readonly: true, id: 'export-json', 'aria-label': 'Spielstand' }, json);
+      const m = overlay(el('div.pick', null, el('h3', null, 'Spielstand exportieren'),
+        el('p.small.muted', null, 'Text markieren, kopieren und als .json-Datei speichern.'), txt,
+        btn('Schließen', () => m.close(), 'ghost')), { dismiss: true });
+      txt.select();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(json).then(() => toast('Spielstand kopiert – als .json-Datei speichern.'), fallback);
+    else fallback();
   }
 
   /* ======================= Start ======================= */

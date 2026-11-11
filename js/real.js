@@ -101,73 +101,58 @@ const REAL = (() => {
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  /* ---------- Einrichtungs-Bildschirm ---------- */
-  function setupScreen(back) {
-    const { el, btn, panel, toast } = UI;
+  /* ---------- Reiter „Realmodus“: Schalter + Fotos & Namen der Crew ---------- */
+  function realTab(refresh) {
+    const { el, btn, toast, pager } = UI;
     const joined = HERO_ORDER.filter(id => SAVE.s.heroes[id].joined);
-    const heroRows = joined.map(id => {
-      const nameInp = el('input.search', { id: 'real-name-' + id, type: 'text', maxlength: 24, value: HEROES[id].name, autocomplete: 'off' });
+    const toggle = el('label.opt', null,
+      el('input', { type: 'checkbox', id: 'real-toggle', checked: on(), onchange: e => { SAVE.s.settings.realMode = e.target.checked; SAVE.persist(); SAVE.applyNames(); toast(e.target.checked ? 'Realmodus an – keine Pixelgrafik.' : 'Realmodus aus – Pixelgrafik aktiv.'); stage(on() ? 'Realmodus' : null); refresh(); } }),
+      el('span', null, 'Realmodus aktiv', el('small', null, 'Eigene Fotos statt Pixelfiguren, ruhige Bühne statt Pixel-Szene')));
+    const rows = joined.map(id => {
+      const nameInp = el('input.search', { id: 'real-name-' + id, type: 'text', maxlength: 24, value: HEROES[id].name, autocomplete: 'off', 'aria-label': `Name ${HEROES[id].title}` });
       nameInp.addEventListener('change', () => { SAVE.rename(id, nameInp.value); toast(`Name gespeichert: ${HEROES[id].name}`); });
       return el('div.real-hero', null,
         el('img.real-photo', { src: avatar(id), alt: '' }),
-        el('div.real-hero-info', null, el('small.muted', null, `${HEROES[id].title} · ${TYPES[HEROES[id].weapons[0]].n}`), nameInp,
+        el('div.real-hero-info', null, nameInp,
           el('div.row', null,
-            btn('📷 Foto wählen', async () => { const [img] = await pickFile(true, false); if (!img) return; media.photos[id] = img; if (save()) toast('Foto gespeichert.'); setupScreen(back); }, 'small'),
-            media.photos[id] ? btn('Foto entfernen', () => { delete media.photos[id]; save(); setupScreen(back); }, 'small ghost') : null)));
+            btn('📷 Foto', async () => { const [img] = await pickFile(true, false); if (!img) return; media.photos[id] = img; if (save()) toast('Foto gespeichert.'); refresh(); }, 'small'),
+            media.photos[id] ? btn('Entfernen', () => { delete media.photos[id]; save(); refresh(); }, 'small ghost') : null)));
     });
-    const gallery = (key, label, hint) => el('section.real-react', null,
-      el('h3', null, label, el('small', null, ` (${media[key].length}/${MAX_REACT})`)),
-      el('p.small.muted', null, hint),
-      el('div.real-thumbs', null, media[key].map((src, i) => el('div.real-thumb', null, el('img', { src, alt: '' }),
-        el('button.real-del', { 'aria-label': 'Bild löschen', onclick: () => { media[key].splice(i, 1); save(); setupScreen(back); } }, '✕'))),
-        media[key].length < MAX_REACT ? el('button.real-add', { onclick: async () => {
-          const imgs = await pickFile(false, true);
-          for (const im of imgs) if (media[key].length < MAX_REACT) media[key].push(im);
-          if (imgs.length && save()) toast(`${imgs.length} Bild(er) hinzugefügt.`);
-          setupScreen(back);
-        } }, '+ Bilder') : null));
-    panel(el('div.phead', null, el('h2', null, '📷 Realmodus einrichten'),
-      el('p.sub', null, 'Erstelle deine Crew mit eigenen Fotos und Namen und lade Bilder hoch, die bei richtigen und falschen Antworten erscheinen. Alles bleibt nur in diesem Browser.')),
-      el('label.opt', null, el('input', { type: 'checkbox', id: 'real-toggle', checked: on(), onchange: e => { SAVE.s.settings.realMode = e.target.checked; SAVE.persist(); SAVE.applyNames(); toast(e.target.checked ? 'Realmodus an – keine Pixelgrafik.' : 'Realmodus aus – Pixelgrafik aktiv.'); setupScreen(back); } }),
-        el('span', null, 'Realmodus aktiv', el('small', null, 'Fotos statt Pixelfiguren, ruhige Bühne statt Pixel-Szene'))),
-      el('h3', null, 'Deine Crew'), el('div.real-heroes', null, heroRows),
-      joined.length < HERO_ORDER.length ? el('p.small.muted', null, `Weitere ${HERO_ORDER.length - joined.length} Crew-Plätze schalten sich im Spielverlauf frei.`) : null,
-      gallery('pos', '👍 Bilder bei richtigen Antworten', 'Eins davon erscheint zufällig, wenn du richtig antwortest.'),
-      gallery('neg', '👎 Bilder bei falschen Antworten', 'Eins davon erscheint zufällig, wenn du falsch antwortest.'),
-      el('h3', null, '💬 Eigene Reaktionstexte'),
-      UI.btn('Texte für richtige & falsche Antworten bearbeiten', () => textScreen(() => setupScreen(back)), 'wide'),
-      el('p.fine', null, 'Bilder werden verkleinert (Fotos 256 × 256 Pixel, Reaktionsbilder max. 520 Pixel) und nicht in den Spielstand-Export übernommen.'),
-      btn('◂ Zurück', back, 'ghost wide'));
-    stage('Realmodus');
+    return el('div.tabcol', null, toggle, pager(rows, { cols: document.getElementById('panel').clientWidth > 620 ? 2 : 1 }));
   }
 
-  /* ---------- Eigene Reaktionstexte (gelten auch ohne Realmodus) ---------- */
+  /* ---------- Reiter „Reaktionen“: Bilder & Texte für richtig / falsch ---------- */
   const MAX_LINES = 30, MAX_LEN = 160;
-  function textScreen(back) {
-    const { el, btn, panel, toast } = UI;
+  let reactKind = 'pos';
+  function reactTab(refresh) {
+    const { el, btn, toast } = UI;
     const L = SAVE.s.lines || { pos: [], neg: [], mode: 'mix' };
-    const area = (id, list, ph) => el('textarea.lines', { id, rows: 6, placeholder: ph }, list.join('\n'));
-    const pos = area('lines-pos', L.pos, 'Super, {name}!\nGenau so steht es im Katalog.\nWeiter so – {n} richtige in Folge!');
-    const neg = area('lines-neg', L.neg, 'Das war nichts – lies die Lösung genau.\nNochmal üben!');
-    const mode = el('select', { id: 'lines-mode' },
-      el('option', { value: 'mix', selected: L.mode !== 'only' }, 'Gemischt mit den Crew-Sprüchen'),
-      el('option', { value: 'only', selected: L.mode === 'only' }, 'Nur meine eigenen Texte'));
+    const kind = reactKind, list = media[kind];
+    const seg = el('div.seg', null, [['pos', `👍 Richtig (${media.pos.length} Bilder)`], ['neg', `👎 Falsch (${media.neg.length} Bilder)`]].map(([k, l]) => el('button' + (k === kind ? '.on' : ''), { onclick: () => { reactKind = k; refresh(); } }, l)));
+    const thumbs = el('div.real-thumbs', null, list.map((src, i) => el('div.real-thumb', null, el('img', { src, alt: '' }),
+      el('button.real-del', { 'aria-label': 'Bild löschen', onclick: () => { list.splice(i, 1); save(); refresh(); } }, '✕'))),
+      list.length < MAX_REACT ? el('button.real-add', { 'aria-label': 'Bilder hinzufügen', onclick: async () => {
+        const imgs = await pickFile(false, true);
+        for (const im of imgs) if (list.length < MAX_REACT) list.push(im);
+        if (imgs.length && save()) toast(`${imgs.length} Bild(er) hinzugefügt.`);
+        refresh();
+      } }, '+ Bild') : null);
+    const area = el('textarea.lines', { id: 'lines-' + kind, placeholder: (kind === 'pos' ? 'Eigene Sprüche, eine Zeile pro Spruch, z. B.\nSuper, {name}!\n{n} richtige in Folge!' : 'Eigene Sprüche, eine Zeile pro Spruch, z. B.\nDas war nichts – lies die Lösung genau.') + '\n({name} = Sprecher, {n} = Serie)', 'aria-label': 'Eigene Sprüche, eine Zeile pro Spruch' }, (L[kind] || []).join('\n'));
+    const mode = el('select', { id: 'lines-mode', 'aria-label': 'Verwendung der eigenen Sprüche' },
+      el('option', { value: 'mix', selected: L.mode !== 'only' }, 'Gemischt mit Crew-Sprüchen'),
+      el('option', { value: 'only', selected: L.mode === 'only' }, 'Nur eigene Sprüche'));
     const parse = ta => ta.value.split('\n').map(s => s.replace(/\s+/g, ' ').trim().slice(0, MAX_LEN)).filter(Boolean).slice(0, MAX_LINES);
-    panel(el('div.phead', null, el('h2', null, '💬 Eigene Reaktionstexte'),
-      el('p.sub', null, 'Eine Zeile = ein Spruch. Bei richtigen Antworten spricht ein Crew-Mitglied deinen Text, bei falschen der Kapitän (oder wer gerade an Bord ist).')),
-      el('p.small.muted', null, 'Platzhalter: {name} = Name des Sprechers, {n} = aktuelle bzw. gerade gerissene Serie. Bis zu 30 Zeilen mit je 160 Zeichen.'),
-      el('h3', null, '👍 Bei richtigen Antworten'), pos,
-      el('h3', null, '👎 Bei falschen Antworten'), neg,
-      el('label.opt', null, el('span', null, 'Verwendung'), mode),
-      el('div.row', null,
-        btn('Abbrechen', back, 'ghost'),
-        btn('✔ Speichern', () => {
-          SAVE.s.lines = { pos: parse(pos), neg: parse(neg), mode: mode.value };
-          SAVE.persist();
-          toast(`Gespeichert: ${SAVE.s.lines.pos.length} positive, ${SAVE.s.lines.neg.length} negative Texte.`);
-          back();
-        }, 'gold')));
+    thumbs.title = `Bilder (${list.length}/${MAX_REACT}) – erscheinen im Realmodus zufällig bei ${kind === 'pos' ? 'richtigen' : 'falschen'} Antworten`;
+    area.title = 'Eine Zeile pro Spruch · {name} = Sprecher, {n} = Serie';
+    return el('div.tabcol.react-tab', null, seg,
+      thumbs,
+      area,
+      el('div.row', null, mode, btn('✔ Sprüche speichern', () => {
+        const cur = SAVE.s.lines || { pos: [], neg: [], mode: 'mix' };
+        cur[kind] = parse(area); cur.mode = mode.value; SAVE.s.lines = cur; SAVE.persist();
+        toast(`${cur[kind].length} Sprüche gespeichert.`);
+      }, 'gold small')));
   }
 
-  return { on, load, removeSlot, avatar, stage, battle, reactionImage, setupScreen, textScreen, MON_ICON };
+  return { on, load, removeSlot, avatar, stage, battle, reactionImage, realTab, reactTab, MON_ICON };
 })();
