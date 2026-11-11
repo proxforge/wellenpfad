@@ -1,0 +1,10 @@
+.git
+.github
+docs
+tools
+*.md
+LICENSE
+.gitignore
+.nojekyll
+Dockerfile
+docker-compose.yml
