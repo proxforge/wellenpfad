@@ -67,7 +67,9 @@ const QUIZ = (() => {
   const MIN_SCALE = 0.8;
   function autoFit(card) {
     const run = () => {
-      if (fitText(card, MIN_SCALE) || card._pager) return;
+      const fits = fitText(card, MIN_SCALE);
+      if (card._pager) { card._pager.relayout(); return; } // Seiten nach jeder Schriftänderung neu aufteilen
+      if (fits) return;
       const ans = card.querySelector('.quiz-answers');
       if (!ans) return;
       const items = [...ans.children];
@@ -75,8 +77,9 @@ const QUIZ = (() => {
       ans.replaceChildren(card._pager);
       ans.classList.add('paged');
       card.classList.add('paged');
-      requestAnimationFrame(() => fitText(card, MIN_SCALE));
+      requestAnimationFrame(run);
     };
+    card._fit = run;
     requestAnimationFrame(run);
     const ro = new ResizeObserver(run); ro.observe(card);
     return () => ro.disconnect();
@@ -152,7 +155,7 @@ const QUIZ = (() => {
               el('small', null, ok ? ` · Fach ${res.before} → ${res.after}` : ' · zurück in Fach 0')),
             cont),
           r ? r.node : null));
-        requestAnimationFrame(() => fitText(card, MIN_SCALE));
+        requestAnimationFrame(() => { card._fit(); if (card._pager) card._pager.showItem(rightIdx); });
         cont.focus({ preventScroll: true });
         let auto = null;
         if (ok && opts.autoClose !== false) auto = setTimeout(finish, 1900);
