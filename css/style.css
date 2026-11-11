@@ -670,3 +670,8 @@ html, body { height: 100%; overflow: hidden; }
 .ans-pager .pg-body { gap: 6px; }
 @media (max-height: 600px) { .quiz-head .tag.box { display: none; } .modal.quiz-modal { padding-top: 6px; padding-bottom: 6px; } .quiz-card { gap: 6px; } }
 .quiz-card.paged.answered .quiz-media:not(.react-media) { display: none; }
+
+/* Blätterbereich: Höhe unabhängig vom Inhalt, damit Ausmessen und Anzeige übereinstimmen */
+.pager { flex: 1 1 0; }
+.pg-body { flex: 1 1 0; }
+.quiz-answers.paged { flex: 1 1 0; }

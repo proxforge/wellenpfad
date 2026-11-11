@@ -74,6 +74,8 @@ const QUIZ = (() => {
     const base = parseFloat(getComputedStyle(card).fontSize);
     let s = 1;
     items.forEach(it => { it.style.display = ''; });
+    const ctl = card.querySelector('.ans-pager .pg-ctl');
+    if (ctl) ctl.style.display = ''; // Blätter-Leiste mitrechnen, sonst fehlt später Platz
     while (s > MIN_SCALE && Math.max(...items.map(i => i.offsetHeight)) > body.clientHeight) {
       s -= 0.04; card.style.fontSize = (base * s) + 'px';
     }
